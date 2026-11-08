@@ -1,4 +1,5 @@
-"""Capture de l'image de la fenetre ePSXe (aucune lecture memoire)."""
+"""Capture de l'image de la fenetre du jeu : ePSXe, ou pour la PS2 la fenetre
+qui affiche la carte d'acquisition (projecteur OBS...). Aucune lecture memoire."""
 
 import ctypes
 import ctypes.wintypes as wt
@@ -74,6 +75,44 @@ def find_epsxe_window():
         return None
     found.sort(reverse=True)
     return found[0][1]
+
+
+def list_windows():
+    """Titres des fenetres visibles (pour choisir la source PS2), les plus grandes d'abord."""
+    found = []
+
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            title = window_title(hwnd)
+            r = wt.RECT()
+            user32.GetClientRect(hwnd, ctypes.byref(r))
+            if title and r.right * r.bottom >= 160 * 120:
+                found.append((r.right * r.bottom, title))
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(cb), 0)
+    out = []
+    for _, t in sorted(found, reverse=True):
+        if t not in out:
+            out.append(t)
+    return out
+
+
+def find_window_titled(title):
+    """Fenetre visible dont le titre vaut exactement `title` (sinon le contient)."""
+    exact, partial = [], []
+
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            t = window_title(hwnd)
+            if t == title:
+                exact.append(hwnd)
+            elif title and title.lower() in t.lower():
+                partial.append(hwnd)
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(cb), 0)
+    return (exact or partial or [None])[0]
 
 
 def window_title(hwnd):
@@ -181,6 +220,7 @@ class WindowCapture:
 
     def __init__(self):
         self.hwnd = None
+        self.title = None                 # None : ePSXe ; sinon titre de la fenetre (PS2)
         self.method = "screen"
         self.covered = False
         try:
@@ -191,8 +231,14 @@ class WindowCapture:
     def ensure_window(self):
         if self.hwnd and user32.IsWindowVisible(self.hwnd):
             return True
-        self.hwnd = find_epsxe_window()
+        self.hwnd = find_epsxe_window() if self.title is None else find_window_titled(self.title)
         return self.hwnd is not None
+
+    def set_source(self, title):
+        """None = fenetre ePSXe ; un titre = fenetre de la carte d'acquisition (PS2)."""
+        if title != self.title:
+            self.title = title
+            self.hwnd = None
 
     def grab(self):
         if not self.ensure_window() or user32.IsIconic(self.hwnd):

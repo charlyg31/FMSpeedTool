@@ -21,7 +21,11 @@ FPS = 4
 
 def main(folder, start=0, end=10 ** 9):
     tmp = tempfile.mkdtemp()
+    # FM_DIGITS : chiffres appris pour cette source (ex. console), sinon ceux livres.
     digits = vision.DigitReader(os.path.join(tmp, "d.json"),
+                                os.environ.get("FM_DIGITS") or
+                                (os.path.join(ROOT, "fm_speedtool", "assets", "digits_ps2_default.json")
+                                 if os.environ.get("FM_PS2") else None) or
                                 os.path.join(ROOT, "fm_speedtool", "assets", "digits_default.json"))
     builtin = vision.TemplateLibrary(os.path.join(ROOT, "fm_speedtool", "assets", "builtin"))
     learned = vision.TemplateLibrary(os.path.join(tmp, "learned"))
@@ -33,6 +37,9 @@ def main(folder, start=0, end=10 ** 9):
             print("        stats:", tr.rank_stats())
 
     tr = tracker.Tracker(digits, builtin, learned, on_event)
+    if os.environ.get("FM_PS2"):
+        # Mode PS2 : chiffres PS2 livres + calage automatique du cadrage.
+        tr.framing = vision.Framing(os.path.join(ROOT, "fm_speedtool", "assets", "hud_ref.png"))
     real = {}
     with open(os.path.join(folder, "index.csv")) as f:
         prev = None

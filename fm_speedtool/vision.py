@@ -84,6 +84,69 @@ class GameArea:
         return frame[y:y + gh, x:x + gw]
 
 
+class Framing:
+    """Cadrage vertical d'une source console (PS2 + carte d'acquisition).
+
+    Selon la console, la carte d'acquisition et OBS, l'image du jeu est un peu
+    decalee ou etiree verticalement par rapport a ePSXe. On cherche le
+    decalage (dy) et l'etirement (sy) qui ramenent le panneau LP/COM/YOU a sa
+    place ePSXe, d'apres une image de reference du panneau. Le reglage n'est
+    retenu qu'apres plusieurs mesures concordantes, puis il ne bouge plus."""
+
+    REF_RECT = (490, 25, 140, 90)
+    SCALES = [round(0.86 + 0.02 * i, 2) for i in range(15)]       # 0,86 .. 1,14
+    OFFSETS = list(range(-40, 41, 2))                              # pixels (image 640x512)
+    GOOD = 0.85                                                     # correlation minimale
+    VOTES = 3
+
+    def __init__(self, ref_path, dy=0.0, sy=1.0, locked=False):
+        ref = cv2.imread(ref_path, cv2.IMREAD_GRAYSCALE)
+        self.ref = ref.astype(np.float32) if ref is not None else None
+        self.dy, self.sy, self.locked = float(dy), float(sy), bool(locked) and ref is not None
+        self.votes = []
+        self.score = 0.0
+
+    def apply(self, img):
+        if self.dy == 0 and self.sy == 1.0:
+            return img
+        m = np.float32([[1, 0, 0], [0, self.sy, self.dy]])
+        return cv2.warpAffine(img, m, (W, H), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+
+    def measure(self, img):
+        """Meilleur (score, dy, sy) pour cette image, ou None si pas de panneau."""
+        if self.ref is None:
+            return None
+        x, y, w, h = self.REF_RECT
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        band = gray[:, x:x + w]
+        best = None
+        for sy in self.SCALES:
+            # ligne de sortie yo <- ligne source (yo - dy) / sy
+            for dy in self.OFFSETS:
+                src = (np.arange(y, y + h) - dy) / sy
+                if src[0] < 0 or src[-1] > H - 1:
+                    continue
+                patch = band[np.round(src).astype(int)]
+                r = float(cv2.matchTemplate(patch, self.ref, cv2.TM_CCOEFF_NORMED)[0, 0])
+                if best is None or r > best[0]:
+                    best = (r, dy, sy)
+        return best
+
+    def calibrate(self, img):
+        """A appeler de temps en temps sur une image normalisee ; True si le reglage change."""
+        if self.locked:
+            return False
+        m = self.measure(img)
+        if m is None or m[0] < self.GOOD:
+            return False
+        self.votes = (self.votes + [(m[1], m[2])])[-self.VOTES:]
+        if len(self.votes) == self.VOTES and len(set(self.votes)) == 1:
+            self.dy, self.sy = float(m[1]), float(m[2])
+            self.score, self.locked = m[0], True
+            return True
+        return False
+
+
 def normalize(frame):
     if frame is None:
         return None
@@ -169,7 +232,7 @@ class DigitReader:
 
     def add(self, digit, vec):
         vs = self.templates.setdefault(digit, [])
-        if all(np.abs(v - vec).mean() > 0.04 for v in vs) and len(vs) < 12:
+        if all(np.abs(v - vec).mean() > 0.04 for v in vs) and len(vs) < 40:   # place pour d autres sources (console)
             vs.append(vec)
             return True
         return False

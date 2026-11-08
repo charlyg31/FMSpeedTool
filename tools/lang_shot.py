@@ -22,6 +22,8 @@ orig = app.load_config
 def load_config():
     cfg = orig()
     cfg["language"] = lang
+    if os.environ.get("FM_SOURCE"):
+        cfg["source"] = os.environ["FM_SOURCE"]
     return cfg
 
 

@@ -22,6 +22,20 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
 - **LiveSplit over TCP (fallback)**: right click > Control > Start TCP Server, pick "TCP" at the
   bottom of the tool, then "Connect LiveSplit".
 
+## Playing on PS2 (capture card)
+
+At the top right, pick **Game: PS2** (the tool restarts), then in **Window** the window that shows
+the game: for example an OBS windowed projector of your capture card source (right click the
+source > Windowed Projector). This window must stay visible and show only the game, with no
+overlay on top.
+- **Automatic framing**: on the first duel the tool finds the LP/COM/YOU panel and sets the
+  vertical offset of your capture setup by itself ("PS2 framing found" in the log). It is kept;
+  "Recalibrate" searches again (after changing a setting).
+- **Digits**: the PS2 video output draws the digits slightly differently. PS2 digits are built in;
+  any missing one shows up in "Digits to name".
+- Tested on A3r1uS's PS2 run (YouTube video): run followed from start to end, framing found on the
+  first duel, 60 fps live, exact rank on 18/27 duels (the others one letter off).
+
 ## Automatic
 
 | Feature | Image signal |

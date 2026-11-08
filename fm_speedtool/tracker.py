@@ -56,6 +56,8 @@ class Tracker:
         self.area = vision.GameArea()     # zone de jeu dans la fenetre (bandes noires)
         self.on_password_screen = False   # ecran PASSWORD du jeu affiche
         self.last_frame = None
+        self.framing = None               # vision.Framing pour une source console (PS2)
+        self.framing_next = 0.0
         self.last_new_run = -1e9
         self.duel_ended_at = -1e9
         self.title_armed = None           # luminosite du titre quand NEW GAME etait surligne
@@ -116,6 +118,15 @@ class Tracker:
         img = frame if normalized else vision.normalize(self.area.crop(frame))
         if img is None:
             return
+        if self.framing is not None:
+            # Console : cale le cadrage vertical sur le panneau LP/COM/YOU (2 fois/s
+            # tant qu'il n'est pas trouve), puis l'applique a chaque image.
+            if not self.framing.locked and now >= self.framing_next:
+                self.framing_next = now + 0.5
+                if self.framing.calibrate(img):
+                    self.on_event("framing", _("Cadrage PS2 trouve (decalage {dy:+.0f}, echelle {sy:.2f})",
+                                               dy=self.framing.dy, sy=self.framing.sy))
+            img = self.framing.apply(img)
         self.last_frame = img
         prep = vision.prepare(img)
         matches = {t.action: t for t in self.builtin.matching(img, prep)}

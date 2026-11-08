@@ -19,6 +19,20 @@ Outil de speedrun pour Yu-Gi-Oh! Forbidden Memories (US, 15 Card Mod) sur ePSXe.
 - **LiveSplit en TCP (secours)** : clic droit > Control > Start TCP Server, choisis « TCP » en bas du
   logiciel, puis « Connecter LiveSplit ».
 
+## Jouer sur PS2 (carte d'acquisition)
+
+En haut à droite, choisis **Jeu : PS2** (le logiciel redémarre), puis dans **Fenêtre** la fenêtre
+qui affiche le jeu : par exemple un projecteur OBS de la source de la carte d'acquisition
+(clic droit sur la source > Projecteur fenêtré). Cette fenêtre doit rester visible et ne montrer
+que le jeu, sans incrustation par-dessus.
+- **Cadrage automatique** : au premier duel, le logiciel cherche le panneau LP/COM/YOU et cale
+  tout seul le décalage vertical propre à ta carte d'acquisition (« Cadrage PS2 trouvé » dans le
+  journal). Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
+- **Chiffres** : la sortie vidéo de la PS2 rend les chiffres un peu différemment. Des chiffres PS2
+  sont intégrés ; s'il en manque, ils apparaissent dans « Chiffres à nommer ».
+- Testé sur la run PS2 d'A3r1uS (vidéo YouTube) : run suivie du début à la fin, cadrage trouvé
+  dès le premier duel, 60 img/s en direct, rang exact sur 18/27 duels (les autres à une lettre près).
+
 ## Automatique
 
 | Fonction | Signal à l'image |

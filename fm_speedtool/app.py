@@ -36,6 +36,9 @@ FPS_TARGET = 60
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
     "language": "",               # "" = langue de Windows (francais ou anglais)
+    "source": "epsxe",            # "epsxe" (fenetre ePSXe) ou "ps2" (carte d'acquisition)
+    "ps2_window": "",             # titre de la fenetre qui affiche la PS2 (projecteur OBS...)
+    "ps2_framing": None,          # [dy, sy] cadrage PS2 trouve (None : a chercher)
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": ["N/A"] * 6,
@@ -72,6 +75,10 @@ class Worker(threading.Thread):
 
     def on_event(self, kind, msg):
         self.events.put((kind, msg))
+        if kind == "framing":
+            fr = self.app.tracker.framing
+            self.app.cfg["ps2_framing"] = [fr.dy, fr.sy]
+            self.app._save_config()
         if kind not in ("split", "new_run"):
             return
         opts = self.app.tracker.options
@@ -137,8 +144,12 @@ class App:
         except OSError:
             self.bridge = None            # memoire partagee indisponible : TCP seulement
         self.livesplit = LiveSplitClient(self.cfg["host"], int(self.cfg["port"]))
-        self.digits = vision.DigitReader(os.path.join(APP_DIR, "digits.json"),
-                                         os.path.join(BASE_DIR, "assets", "digits_default.json"))
+        # Chiffres du HUD : un jeu par source (la sortie video d'une PS2 les rend un peu
+        # differemment d'ePSXe ; ceux appris a la main vont dans le fichier de la source).
+        ps2 = self.cfg.get("source") == "ps2"
+        self.digits = vision.DigitReader(
+            os.path.join(APP_DIR, "digits_ps2.json" if ps2 else "digits.json"),
+            os.path.join(BASE_DIR, "assets", "digits_ps2_default.json" if ps2 else "digits_default.json"))
         self.builtin = vision.TemplateLibrary(BUILTIN_DIR)
         self.learned = vision.TemplateLibrary(os.path.join(APP_DIR, "templates"))
         self.worker = None
@@ -147,7 +158,12 @@ class App:
         self.tracker = tracker.Tracker(self.digits, self.builtin, self.learned,
                                        lambda k, m: self.worker.on_event(k, m), deck=self.deck)
         self.tracker.options.update(self.cfg["options"])
+        if ps2:
+            saved = self.cfg.get("ps2_framing")
+            self.tracker.framing = vision.Framing(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
+                                                  *(saved or (0.0, 1.0)), locked=bool(saved))
         self.worker = Worker(self)
+        self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None)
 
         page = self.page = ttk.Frame(root, padding=6)
         page.pack(fill="both", expand=True)
@@ -183,7 +199,6 @@ class App:
         top = ttk.Frame(page)
         top.grid(row=0, column=0, columnspan=3, sticky="ew")
         self.status = tk.StringVar()
-        ttk.Label(top, textvariable=self.status, font=("Segoe UI", 10)).pack(side="left")
 
         bottom = ttk.Frame(page)
         bottom.grid(row=3, column=0, columnspan=3, sticky="ew")
@@ -201,6 +216,26 @@ class App:
         ttk.Radiobutton(bottom, text="Script FMSpeedTool.asl", value="script",
                         variable=self.ls_mode).pack(side="right")
         ttk.Label(bottom, text=_("LiveSplit :")).pack(side="right", padx=4)
+        # Source du jeu (en haut a droite) : fenetre ePSXe, ou fenetre qui affiche la
+        # PS2 (carte d'acquisition, projecteur OBS...).
+        self.source = tk.StringVar(value=self.cfg.get("source", "epsxe"))
+        self.ps2_window = tk.StringVar(value=self.cfg.get("ps2_window", ""))
+        self.ps2_box = ttk.Combobox(top, textvariable=self.ps2_window, width=24,
+                                    postcommand=lambda: self.ps2_box.configure(values=capture.list_windows()))
+        self.ps2_box.bind("<<ComboboxSelected>>", lambda e: self._set_ps2_window())
+        self.ps2_box.bind("<Return>", lambda e: self._set_ps2_window())
+        self.ps2_recal = ttk.Button(top, text=_("Recaler"), command=self._recalibrate)
+        if self.source.get() == "ps2":
+            self.ps2_recal.pack(side="right")
+            self.ps2_box.pack(side="right", padx=4)
+            ttk.Label(top, text=_("Fenetre :")).pack(side="right")
+        ttk.Radiobutton(top, text="PS2", value="ps2", variable=self.source,
+                        command=self._set_source).pack(side="right", padx=(2, 12))
+        ttk.Radiobutton(top, text="ePSXe", value="epsxe", variable=self.source,
+                        command=self._set_source).pack(side="right", padx=2)
+        ttk.Label(top, text=_("Jeu :")).pack(side="right")
+        # La ligne d'etat prend la place restante (placee apres : le choix du jeu reste entier).
+        ttk.Label(top, textvariable=self.status, font=("Segoe UI", 10)).pack(side="left")
 
         opts = ttk.Frame(page)
         opts.grid(row=4, column=0, columnspan=3, sticky="w")
@@ -221,6 +256,33 @@ class App:
         lang_box.pack(side="left", padx=4)
         lang_box.bind("<<ComboboxSelected>>", lambda e: self._set_language())
         ttk.Label(opts, text="Langue / Language :").pack(side="left", padx=(24, 0), before=lang_box)
+
+    def _set_source(self):
+        src = self.source.get()
+        if src == self.cfg.get("source", "epsxe"):
+            return
+        self.cfg["source"] = src
+        self._save_config()
+        if messagebox.askyesno("FM Speed Tool", _("Redemarrer maintenant pour changer de source ?")):
+            self.restart()
+
+    def _set_ps2_window(self):
+        title = self.ps2_window.get().strip()
+        self.cfg["ps2_window"] = title
+        self._save_config()
+        self.worker.cap.set_source(title or "?")
+        self._log(_("Fenetre PS2 : {title}", title=title))
+
+    def _recalibrate(self):
+        """Oublie le cadrage PS2 : il sera recherche des que le panneau LP/COM/YOU s'affiche."""
+        fr = self.tracker.framing
+        if fr is None:
+            return
+        with self.worker.lock:
+            fr.dy, fr.sy, fr.locked, fr.votes = 0.0, 1.0, False, []
+        self.cfg["ps2_framing"] = None
+        self._save_config()
+        self._log(_("Cadrage PS2 : recherche en cours (affiche un duel)"))
 
     def _set_language(self):
         code = next((c for c, n in self.langs.items() if n == self.lang_var.get()), None)
@@ -731,7 +793,11 @@ class App:
             ls = _("TCP connecte") if self.livesplit.connected else _("TCP deconnecte")
         def val(x):
             return "-" if x is None else x
-        self.status.set(_("ePSXe : {win} ({fps} img/s)     LiveSplit : {ls}", win=win,
+        src = "ePSXe"
+        if self.tracker.framing is not None:
+            fr = self.tracker.framing
+            src = "PS2" + ("" if fr.locked else " " + _("(cadrage en attente d'un duel)"))
+        self.status.set(_("{source} : {win} ({fps} img/s)     LiveSplit : {ls}", source=src, win=win,
                           fps=f"{self.worker.fps:.0f}", ls=ls) + "\n"
                         + _("Tour : {turn}     LP  COM {com_lp} / YOU {you_lp}     Cartes  COM {com_deck} / YOU {you_deck}",
                             turn=tr.active or "-", com_lp=val(hud["com_lp"]), you_lp=val(hud["you_lp"]),

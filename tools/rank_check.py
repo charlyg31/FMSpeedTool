@@ -14,7 +14,7 @@ import numpy as np  # noqa: E402
 
 import vision  # noqa: E402
 
-BADGE = (300, 250, 200, 85)   # "DUEL SKILL" + POW/TEC + lettre
+BADGE = (370, 255, 200, 110)  # POW/TEC + lettre du rang (ecran RESULTS OF DUEL)
 
 
 def main(folder, log, out):
