@@ -250,6 +250,38 @@ def _art_windows(img):
     return [tuple(s[:4]) for s in st[1:] if 195 <= s[2] <= 235 and 195 <= s[3] <= 235]
 
 
+def board_zoom(img):
+    """Vue rapprochee du terrain apres une pose validee : le haut de l'ecran
+    (noir pendant le choix de la carte) est rempli par le terrain.
+    Video : 0,05 avant, 0,6 a 0,98 apres une pose, 0,06 si la pose est annulee."""
+    return float((img[60:150, 100:540].max(axis=2) > 60).mean()) > 0.5
+
+
+def reveal_card(img):
+    """Grande carte revelee : (x, y, illustration, case ATK/DFD en gris) ou None."""
+    wins = _art_windows(img)
+    if len(wins) != 1:
+        return None
+    x, y, w, h = wins[0]
+    art = img[y + 8:y + h - 8, x + 8:x + w - 8].astype(np.float32)
+    stats = cv2.cvtColor(img[y + h - 4:y + h + 50, x + 110:x + w + 12], cv2.COLOR_BGR2GRAY).astype(np.float32)
+    return x, y, art, stats
+
+
+def card_compare(ref, cur):
+    """'counting' : meme carte au meme endroit dont l'ATK/DFD defile (equipement) ;
+    'same' : meme carte, chiffres fixes ; 'other' : autre carte ou plus de carte.
+    Mesure sur la video : fusion < 1,2 ; equipement 1,7 a 4,8 (compteur qui monte)."""
+    if ref is None or cur is None or abs(ref[0] - cur[0]) > 4 or abs(ref[1] - cur[1]) > 4:
+        return "other"
+    if ref[2].shape != cur[2].shape or ref[3].shape != cur[3].shape:
+        return "other"
+    if float(np.abs(ref[2] - cur[2]).mean()) > 3.0:
+        return "other"
+    d = float(np.abs(ref[3] - cur[3]).mean())
+    return "counting" if 1.5 <= d < 12 else "same"
+
+
 def reveal_art(img):
     """Illustration (48x48) de la grande carte revelee apres une fusion ou un
     equipement, ou None."""
@@ -298,8 +330,18 @@ def magic_card_shown(img):
     """Grande carte magie (cadre vert, souvent en rotation) : la zone verte
     forme un bloc plus haut que large. Un terrain Foret/Prairie donne une large
     bande, les cartes de la main sont petites."""
-    r = img[120:, 100:540].astype(np.int16)
-    m = ((r[..., 1] > r[..., 2] + 30) & (r[..., 1] > r[..., 0] + 20)).astype(np.uint8)
+    full = img.astype(np.int16)
+    green = (full[..., 1] > full[..., 2] + 30) & (full[..., 1] > full[..., 0] + 20)
+    # Sur un terrain vert (Foret, Prairie) la carte se confond avec le terrain :
+    # au-dessus du terrain (fond noir), seule la carte est verte, en bloc central,
+    # et son illustration (en dessous du cadre vert) ne l'est pas. Camera
+    # reculee : le terrain, lui, reste vert jusqu'en bas.
+    band = green[60:130]
+    if (band[:, 200:440].mean() > 0.5
+            and np.r_[band[:, 90:160].ravel(), band[:, 480:550].ravel()].mean() < 0.15
+            and green[150:200, 200:440].mean() < 0.35):
+        return True
+    m = green[120:, 100:540].astype(np.uint8)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     _, _, st, _ = cv2.connectedComponentsWithStats(m)
     parts = [s for s in st[1:] if s[4] > 2500]

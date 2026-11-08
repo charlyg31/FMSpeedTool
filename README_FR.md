@@ -51,8 +51,8 @@ Un historique sur la page donne le rang final de chaque duel de la run (campagne
 
 ## Validé sur la vidéo du 20/10/2026
 
-Rang estimé comparé au rang affiché par le jeu : type POW/TEC correct sur 34/34 duels,
-lettre exacte sur 29/34 (les 5 autres à une lettre près), les 5 duels TEC contre Pegasus corrects.
+Rang estimé comparé au rang affiché par le jeu : exact sur les 34 duels dont le badge de rang est
+lisible (34/34, dont les 5 duels A-TEC contre Pegasus).
 
 
 `tools/extract_video.py` extrait les images du jeu et la ligne surlignée de LiveSplit (tes vrais splits).

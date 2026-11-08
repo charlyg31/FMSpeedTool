@@ -35,6 +35,9 @@ EDGE_COOLDOWN = 1.5      # anti-rebond des gabarits
 FADE_WINDOW = 0.8        # NEW GAME valide : l'ecran titre s'assombrit dans ce delai
 NAME_ENTRY_GRACE = 30.0  # l'ecran du nom ne relance pas une run deja demarree
 POST_DUEL_IGNORE = 20.0  # portrait du vaincu dans le dialogue d'apres-duel
+REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defile = equipement)
+ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
+PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
 # Types de split (transmis au script LiveSplit, qui filtre selon ses reglages)
 SPLIT_WIN, SPLIT_FIRST_LOSS, SPLIT_FARM, SPLIT_OTHER = 1, 2, 3, 4
 
@@ -84,9 +87,12 @@ class Tracker:
         self.hud_last_seen = 0.0
         self.decided = None               # 'win' / 'loss'
         self.orient_seen = False
-        self.orient_back = []
+        self.orient_back_at = None    # dernier dos de carte vu sur l'ecran d'orientation
+        self.orient_last_at = 0.0
+        self.facedown_until = 0.0         # pose face cachee a confirmer (zoom sur le terrain)
         self.reveal_until = 0.0           # flash vu : on attend la grande carte
         self.equip_until = 0.0
+        self.reveal_watch = None          # (debut, carte) : fusion ou equipement a confirmer
         self.battle = None
         self.manual = {k: 0 for k in fmlogic.RANK_TABLE}
 
@@ -151,7 +157,7 @@ class Tracker:
         if hud:
             self._hud_frame(img, now)
         if self.in_duel:
-            self._orientation(matches)
+            self._orientation(img, matches, now)
             self._fusion_equip(img, hud, now)
             self._battle(img, hud)
             if "you_win" in matches or "winner_you" in matches:
@@ -282,6 +288,8 @@ class Tracker:
             result = "loss"
         if self.battle:
             self._resolve_battle()
+        if self.reveal_watch:
+            self._count_reveal("fusion")
         s = self.rank_stats()
         total = fmlogic.score(s)
         summary = _("rang estime {band} ({score})", band=fmlogic.band(total), score=total)
@@ -313,7 +321,15 @@ class Tracker:
 
     def _fusion_equip(self, img, hud, now):
         """Fusion : flash blanc puis grande carte revelee. Equipement : halo
-        violet-magenta (verifie sur la video de run)."""
+        violet-magenta, ou flash dore puis grande carte du monstre equipe dont
+        l'ATK/DFD defile (verifie sur la video de run)."""
+        if self.reveal_watch:
+            t0, ref = self.reveal_watch
+            verdict = vision.card_compare(ref, vision.reveal_card(img))
+            if verdict == "counting":
+                self._count_reveal("equip")
+            elif verdict == "other" or now - t0 > REVEAL_WATCH:
+                self._count_reveal("fusion")
         if not hud or self.active != "you":
             return
         if self._edge("magic_card", vision.magic_card_shown(img), now):
@@ -330,8 +346,15 @@ class Tracker:
             return
         if vision.reveal_art(img) is None:
             return
-        kind = "equip" if pending_equip else "fusion"
         self.equip_until = self.reveal_until = 0.0
+        if pending_equip:
+            self._count_reveal("equip")
+        else:
+            # Flash blanc : fusion, sauf si l'ATK de la carte se met a defiler.
+            self.reveal_watch = (now, vision.reveal_card(img))
+
+    def _count_reveal(self, kind):
+        self.reveal_watch = None
         self.stats[kind] += 1
         self.on_event("stat", _(fmlogic.STAT_LABELS[kind]) + " +1")
 
@@ -370,18 +393,28 @@ class Tracker:
             self.stats["def_win"] += 1
             self.on_event("stat", _("Victoire en defense +1"))
 
-    def _orientation(self, matches):
-        """Pose d'une carte : ecran avec les fleches jaunes ; si le dos de carte
-        est affiche quand on quitte cet ecran, c'est une pose face cachee."""
-        if "orient_right" in matches:
-            # Le dos de carte clignote pendant l'animation : on garde les 3
-            # dernieres images de l'ecran d'orientation.
-            if not self.orient_seen:
-                self.orient_back = []
-            self.orient_seen = True
-            self.orient_back = (self.orient_back + ["orient_back" in matches])[-3:]
-        elif self.orient_seen:
-            self.orient_seen = False
-            if any(self.orient_back):
+    def _orientation(self, img, matches, now):
+        """Pose d'une carte : ecran avec les fleches jaunes. Le dos de carte
+        apparait aussi au debut de l'animation d'une pose face visible (et
+        d'un piege pose) : seule compte la position de la carte a la sortie
+        de l'ecran (dos vu dans les ORIENT_END_WINDOW dernieres secondes ;
+        il clignote, d'ou une fenetre plutot que la derniere image). Une pose
+        annulee (carte remise en main) ne zoome pas sur le terrain."""
+        if self.facedown_until:
+            if now > self.facedown_until or "orient_right" in matches:
+                self.facedown_until = 0.0
+            elif vision.board_zoom(img):
+                self.facedown_until = 0.0
                 self.stats["facedown"] += 1
                 self.on_event("stat", _("Pose face cachee +1"))
+        if "orient_right" in matches:
+            if not self.orient_seen:
+                self.orient_back_at = None
+            self.orient_seen = True
+            self.orient_last_at = now
+            if "orient_back" in matches:
+                self.orient_back_at = now
+        elif self.orient_seen:
+            self.orient_seen = False
+            if self.orient_back_at is not None and self.orient_last_at - self.orient_back_at <= ORIENT_END_WINDOW:
+                self.facedown_until = now + PLACE_CONFIRM

@@ -22,7 +22,7 @@
    28
   ],
   "file": "t01_orient_left.png",
-  "threshold": 0.85,
+  "threshold": 0.78,
   "pad": 90
  },
  {
@@ -35,7 +35,7 @@
    28
   ],
   "file": "t02_orient_right.png",
-  "threshold": 0.85,
+  "threshold": 0.78,
   "pad": 90
  },
  {

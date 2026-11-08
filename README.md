@@ -51,8 +51,8 @@ Score (52 + points, clamped to 0..99) and band (S-TEC to S-POW) update live, wit
 the target. The +/- buttons fix a missed detection (marked with *). A history on the page gives the
 final rank of every duel of the run (campaign and Free Duel).
 
-Checked on a full run video: POW/TEC type right on 34/34 duels, exact letter on 29/34 (the other 5
-one letter off), all 5 TEC duels against Pegasus right.
+Checked on a full run video: the estimated rank matches the rank shown by the game on all 34 duels
+with a readable rank badge (34/34, including the 5 A-TEC duels against Pegasus).
 
 ## Deck reading
 
