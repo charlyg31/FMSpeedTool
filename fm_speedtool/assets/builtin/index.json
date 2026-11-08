@@ -1,0 +1,262 @@
+[
+ {
+  "name": "Nouvelle partie (Input your NAME!)",
+  "action": "new_run",
+  "rect": [
+   110,
+   385,
+   260,
+   30
+  ],
+  "file": "t00_new_run.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Orientation : fleche gauche",
+  "action": "orient_left",
+  "rect": [
+   217,
+   247,
+   26,
+   28
+  ],
+  "file": "t01_orient_left.png",
+  "threshold": 0.85,
+  "pad": 90
+ },
+ {
+  "name": "Orientation : fleche droite",
+  "action": "orient_right",
+  "rect": [
+   390,
+   247,
+   26,
+   28
+  ],
+  "file": "t02_orient_right.png",
+  "threshold": 0.85,
+  "pad": 90
+ },
+ {
+  "name": "Orientation : dos de carte",
+  "action": "orient_back",
+  "rect": [
+   272,
+   185,
+   96,
+   140
+  ],
+  "file": "t03_orient_back.png",
+  "threshold": 0.85,
+  "pad": 90
+ },
+ {
+  "name": "Titre : NEW GAME surligne",
+  "action": "title_newgame",
+  "rect": [
+   215,
+   62,
+   210,
+   66
+  ],
+  "file": "t04_title_newgame.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Titre : NEW GAME surligne (video)",
+  "action": "title_newgame",
+  "rect": [
+   215,
+   62,
+   210,
+   66
+  ],
+  "file": "t05_title_newgame.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Ecran Free Duel",
+  "action": "free_duel",
+  "rect": [
+   170,
+   25,
+   300,
+   35
+  ],
+  "file": "t06_free_duel.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "YOU WIN!",
+  "action": "you_win",
+  "rect": [
+   170,
+   80,
+   280,
+   190
+  ],
+  "file": "t07_you_win.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "YOU LOSE",
+  "action": "you_lose",
+  "rect": [
+   150,
+   80,
+   330,
+   200
+  ],
+  "file": "t08_you_lose.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Duel Master K",
+  "action": "opponent",
+  "rect": [
+   25,
+   428,
+   230,
+   34
+  ],
+  "file": "t09_opponent.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Pegasus",
+  "action": "opponent",
+  "rect": [
+   25,
+   428,
+   230,
+   34
+  ],
+  "file": "t10_opponent.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Isis",
+  "action": "opponent",
+  "rect": [
+   25,
+   428,
+   230,
+   34
+  ],
+  "file": "t11_opponent.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Pegasus",
+  "action": "opponent",
+  "rect": [
+   100,
+   40,
+   150,
+   200
+  ],
+  "file": "t12_opponent.png",
+  "threshold": 0.85,
+  "pad": 90
+ },
+ {
+  "name": "RESULTS OF DUEL",
+  "action": "results",
+  "rect": [
+   130,
+   18,
+   375,
+   46
+  ],
+  "file": "t13_results.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "WINNER --- COM",
+  "action": "winner_com",
+  "rect": [
+   520,
+   226,
+   65,
+   28
+  ],
+  "file": "t14_winner_com.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "WINNER --- YOU",
+  "action": "winner_you",
+  "rect": [
+   520,
+   226,
+   65,
+   28
+  ],
+  "file": "t15_winner_you.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Menu du jeu (PASSWORD / SAVE)",
+  "action": "game_menu",
+  "rect": [
+   235,
+   330,
+   165,
+   120
+  ],
+  "file": "t16_game_menu.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Ecran DECK",
+  "action": "deck_screen",
+  "rect": [
+   490,
+   12,
+   125,
+   48
+  ],
+  "file": "t17_deck_screen.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Ecran CHEST",
+  "action": "chest_screen",
+  "rect": [
+   15,
+   12,
+   135,
+   40
+  ],
+  "file": "t18_chest_screen.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "Ecran PASSWORD (STARCHIP)",
+  "action": "password_screen",
+  "rect": [
+   305,
+   74,
+   250,
+   36
+  ],
+  "file": "t19_password_screen.png",
+  "threshold": 0.85,
+  "pad": 6
+ }
+]
