@@ -119,10 +119,10 @@ class Tracker:
         if img is None:
             return
         if self.framing is not None:
-            # Console : cale le cadrage vertical sur le panneau LP/COM/YOU (2 fois/s
+            # Console : cale le cadrage vertical sur le menu titre ou le panneau LP/COM/YOU (4 fois/s
             # tant qu'il n'est pas trouve), puis l'applique a chaque image.
             if not self.framing.locked and now >= self.framing_next:
-                self.framing_next = now + 0.5
+                self.framing_next = now + 0.25
                 if self.framing.calibrate(img):
                     self.on_event("framing", _("Cadrage PS2 trouve (decalage {dy:+.0f}, echelle {sy:.2f})",
                                                dy=self.framing.dy, sy=self.framing.sy))
@@ -341,9 +341,11 @@ class Tracker:
                 self._count_reveal("equip")
             elif verdict == "other" or now - t0 > REVEAL_WATCH:
                 self._count_reveal("fusion")
-        if not hud or self.active != "you":
+        # Le flash d'une fusion/d'un equipement peut blanchir l'encadre FIELD (HUD
+        # juge absent) : les panneaux COM/YOU suffisent alors, s'ils sont visibles.
+        if not (hud or vision.hud_panels(img)) or self.active != "you":
             return
-        if self._edge("magic_card", vision.magic_card_shown(img), now):
+        if self._edge("magic_card", hud and vision.magic_card_shown(img), now):
             self.stats["magic"] += 1
             self.on_event("stat", _("Magie pure +1"))
         if self._edge("equip_glow", vision.equip_glow(img) > 4000, now):
@@ -355,7 +357,7 @@ class Tracker:
         pending_equip = now <= self.equip_until
         if not pending_equip and now > self.reveal_until:
             return
-        if vision.reveal_art(img) is None:
+        if vision.reveal_card(img) is None:   # grande carte a la hauteur d une revelation (pas un combat)
             return
         self.equip_until = self.reveal_until = 0.0
         if pending_equip:

@@ -90,19 +90,27 @@ class Framing:
     Selon la console, la carte d'acquisition et OBS, l'image du jeu est un peu
     decalee ou etiree verticalement par rapport a ePSXe. On cherche le
     decalage (dy) et l'etirement (sy) qui ramenent le panneau LP/COM/YOU a sa
-    place ePSXe, d'apres une image de reference du panneau. Le reglage n'est
-    retenu qu'apres plusieurs mesures concordantes, puis il ne bouge plus."""
+    place ePSXe, d'apres des images de reference : le panneau du duel et le menu
+    de l'ecran titre (LOAD / 2P DUEL / TRADE / OPTION), qui passe avant chaque run,
+    donc avant le premier check du deck. Le reglage n'est retenu qu'apres plusieurs
+    mesures concordantes, puis il ne bouge plus (et il est garde d'une session a l'autre)."""
 
-    REF_RECT = (490, 25, 140, 90)
+    REFS = (("hud_ref.png", (490, 25, 140, 90)), ("title_ref.png", (230, 140, 180, 260)))
     SCALES = [round(0.86 + 0.02 * i, 2) for i in range(15)]       # 0,86 .. 1,14
     OFFSETS = list(range(-40, 41, 2))                              # pixels (image 640x512)
     GOOD = 0.85                                                     # correlation minimale
+    SURE = 0.93                                                     # une seule mesure suffit
     VOTES = 3
 
     def __init__(self, ref_path, dy=0.0, sy=1.0, locked=False):
-        ref = cv2.imread(ref_path, cv2.IMREAD_GRAYSCALE)
-        self.ref = ref.astype(np.float32) if ref is not None else None
-        self.dy, self.sy, self.locked = float(dy), float(sy), bool(locked) and ref is not None
+        folder = os.path.dirname(ref_path)
+        self.refs = []
+        for name, rect in self.REFS:
+            ref = cv2.imread(os.path.join(folder, name), cv2.IMREAD_GRAYSCALE)
+            if ref is not None:
+                self.refs.append((rect, ref.astype(np.float32)))
+        self.ref = self.refs[0][1] if self.refs else None
+        self.dy, self.sy, self.locked = float(dy), float(sy), bool(locked) and bool(self.refs)
         self.votes = []
         self.score = 0.0
 
@@ -114,22 +122,26 @@ class Framing:
 
     def measure(self, img):
         """Meilleur (score, dy, sy) pour cette image, ou None si pas de panneau."""
-        if self.ref is None:
+        if not self.refs:
             return None
-        x, y, w, h = self.REF_RECT
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        band = gray[:, x:x + w]
         best = None
-        for sy in self.SCALES:
-            # ligne de sortie yo <- ligne source (yo - dy) / sy
-            for dy in self.OFFSETS:
-                src = (np.arange(y, y + h) - dy) / sy
-                if src[0] < 0 or src[-1] > H - 1:
+        lo, hi = self.OFFSETS[0], self.OFFSETS[-1]
+        for (x, y, w, h), ref in self.refs:
+            band = gray[:, x:x + w]
+            for sy in self.SCALES:
+                # image etiree par sy : la ligne source s arrive en s * sy ; avec le
+                # decalage dy, la reference (lignes y..y+h) tombe en y - dy. Une seule
+                # recherche couvre tous les decalages de lo a hi.
+                scaled = cv2.resize(band, (w, int(round(H * sy))), interpolation=cv2.INTER_LINEAR)
+                top, bot = max(0, y - hi), min(scaled.shape[0], y + h - lo)
+                if bot - top < h:
                     continue
-                patch = band[np.round(src).astype(int)]
-                r = float(cv2.matchTemplate(patch, self.ref, cv2.TM_CCOEFF_NORMED)[0, 0])
-                if best is None or r > best[0]:
-                    best = (r, dy, sy)
+                r = cv2.matchTemplate(scaled[top:bot], ref, cv2.TM_CCOEFF_NORMED)
+                _, m, _, loc = cv2.minMaxLoc(r)
+                dy = y - (top + loc[1])
+                if best is None or m > best[0]:
+                    best = (float(m), int(dy), sy)
         return best
 
     def calibrate(self, img):
@@ -140,7 +152,9 @@ class Framing:
         if m is None or m[0] < self.GOOD:
             return False
         self.votes = (self.votes + [(m[1], m[2])])[-self.VOTES:]
-        if len(self.votes) == self.VOTES and len(set(self.votes)) == 1:
+        # Correspondance tres forte (menu titre, panneau du duel) : une mesure suffit,
+        # le menu titre ne reste qu'une a deux secondes a l'ecran.
+        if m[0] >= self.SURE or (len(self.votes) == self.VOTES and len(set(self.votes)) == 1):
             self.dy, self.sy = float(m[1]), float(m[2])
             self.score, self.locked = m[0], True
             return True
@@ -309,6 +323,9 @@ def _art_windows(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     m = ((hsv[..., 1] < 45) & (hsv[..., 2] > 90) & (hsv[..., 2] < 200)).astype(np.uint8)
     m[:120, 450:] = 0  # HUD
+    # La compression d'une video/d'un stream coupe parfois le cadre en morceaux : on
+    # referme les petites coupures (sans effet sur une capture nette).
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     _, _, st, _ = cv2.connectedComponentsWithStats(m)
     return [tuple(s[:4]) for s in st[1:] if 195 <= s[2] <= 235 and 195 <= s[3] <= 235]
 
@@ -321,28 +338,36 @@ def board_zoom(img):
 
 
 def reveal_card(img):
-    """Grande carte revelee : (x, y, illustration, case ATK/DFD en gris) ou None."""
-    wins = _art_windows(img)
+    """Grande carte revelee apres une fusion/un equipement (a y ~ 127 ; les cartes
+    d'un combat sont plus bas, a y ~ 140) : (x, y, illustration, case ATK/DFD) ou None.
+    La case ATK/DFD est prise avec 3 px de marge pour la comparer a +-3 px pres."""
+    wins = [w for w in _art_windows(img) if 118 <= w[1] <= 134]
     if len(wins) != 1:
         return None
     x, y, w, h = wins[0]
-    art = img[y + 8:y + h - 8, x + 8:x + w - 8].astype(np.float32)
-    stats = cv2.cvtColor(img[y + h - 4:y + h + 50, x + 110:x + w + 12], cv2.COLOR_BGR2GRAY).astype(np.float32)
+    art = cv2.resize(img[y + 8:y + h - 8, x + 8:x + w - 8], (96, 96),
+                     interpolation=cv2.INTER_AREA).astype(np.float32)
+    stats = cv2.cvtColor(img[y + 210:y + 264, x + 110:x + 226], cv2.COLOR_BGR2GRAY).astype(np.float32)
     return x, y, art, stats
 
 
 def card_compare(ref, cur):
     """'counting' : meme carte au meme endroit dont l'ATK/DFD defile (equipement) ;
     'same' : meme carte, chiffres fixes ; 'other' : autre carte ou plus de carte.
-    Mesure sur la video : fusion < 1,2 ; equipement 1,7 a 4,8 (compteur qui monte)."""
+    La case ATK/DFD est recalee a +-3 px (une carte bouge parfois d'un pixel, ce qui
+    suffirait a faire croire que le texte change). Mesure sur trois videos : meme
+    carte fixe <= 2,0 ; ATK qui defile >= 8."""
     if ref is None or cur is None or abs(ref[0] - cur[0]) > 4 or abs(ref[1] - cur[1]) > 4:
         return "other"
-    if ref[2].shape != cur[2].shape or ref[3].shape != cur[3].shape:
+    if ref[3].shape != (54, 116) or cur[3].shape != (54, 116):
         return "other"
-    if float(np.abs(ref[2] - cur[2]).mean()) > 3.0:
+    # Meme illustration : < 1,3 sur une capture nette, jusqu'a 4,1 sur un stream compresse.
+    if float(np.abs(ref[2] - cur[2]).mean()) > 4.5:
         return "other"
-    d = float(np.abs(ref[3] - cur[3]).mean())
-    return "counting" if 1.5 <= d < 12 else "same"
+    inner = ref[3][3:-3, 3:-3]
+    r = cv2.matchTemplate(cur[3], inner, cv2.TM_SQDIFF)
+    d = float(np.sqrt(r.min() / inner.size))
+    return "counting" if d >= 5.0 else "same"
 
 
 def reveal_art(img):
@@ -425,6 +450,11 @@ def card_burning(img, side):
     hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
     fire = (hsv[..., 2] > 200) & (hsv[..., 0] < 35) & (hsv[..., 1] > 90)
     return float(fire.mean()) > 0.10
+
+
+def hud_panels(img):
+    """Panneaux COM (bleu) et YOU (rouge) visibles, sans regarder l'encadre FIELD."""
+    return _panel_strength(img, COM_PANEL, 0) > 90 and _panel_strength(img, YOU_PANEL, 2) > 80
 
 
 def hud_present(img):

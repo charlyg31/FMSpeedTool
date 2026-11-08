@@ -28,8 +28,9 @@ At the top right, pick **Game: PS2** (the tool restarts), then in **Window** the
 the game: for example an OBS windowed projector of your capture card source (right click the
 source > Windowed Projector). This window must stay visible and show only the game, with no
 overlay on top.
-- **Automatic framing**: on the first duel the tool finds the LP/COM/YOU panel and sets the
-  vertical offset of your capture setup by itself ("PS2 framing found" in the log). It is kept;
+- **Automatic framing**: on the title menu (NEW GAME / LOAD...) or on the first duel, the tool
+  sets the vertical offset of your capture setup by itself ("PS2 framing found" in the log), so it
+  is ready before the first deck check. It is kept;
   "Recalibrate" searches again (after changing a setting).
 - **Digits**: the PS2 video output draws the digits slightly differently. PS2 digits are built in;
   any missing one shows up in "Digits to name".
@@ -72,11 +73,14 @@ with a readable rank badge (34/34, including the 5 A-TEC duels against Pegasus).
 
 On the deck building screens the tool reads:
 - **DECK screen**: position (01..40) and number of each card, deck counter, card under the cursor;
-- **CHEST screen**: number of each card and its copies "in chest / in deck".
+- **CHEST screen**: only **additions** count (a card whose "in deck" number goes up); removals are
+  read on the DECK screen only.
 
-It works out the deck list and counts every **addition** and **removal**. Scroll once through the
-whole deck (5 pages) for a complete read; after that every change is tracked. Types and ATK come
-from the YGO-FM-FusionCalc database.
+The first deck check sets the base: scroll the deck once (R1, about one page every 0.2 s or slower
+is fine); the deck is complete when every position up to the displayed counter has been read (40,
+or fewer right after a removal). After that only additions and removals change it. Multiple copies
+are counted. Checked live on ePSXe: 40/40 cards with R1 every 0.2 s, same result as a slow read.
+Types and ATK come from the YGO-FM-FusionCalc database.
 
 ## Final 6
 
@@ -84,6 +88,8 @@ The useful cards are filled from the deck read ("Read the deck automatically" bo
 win % against each opponent and for the whole Final 6 is recomputed live, using the formulas of
 Exarion's "FM win rate calculator 2.1" spreadsheet. "Dark Hole" is ticked if you start with Dark
 Hole instead of Raigeki; extra Raigeki/Dark Hole count as Crush Card (spreadsheet rule).
+Equips have one counter per type, several copies allowed (Megamorph has its own box); the
+spreadsheet has 6 equip slots, so with more than 6 the best 6 count.
 "Also open on fusion.lukadevv.com" copies a link to paste with IMPORT on that site.
 
 ## Passwords

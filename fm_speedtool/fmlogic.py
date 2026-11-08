@@ -101,6 +101,16 @@ def advice(stats, target="A-TEC"):
 F6_FIELDS = ["dragonsUnder1600", "dragons1600Plus", "thunderDragons", "thunders", "umi",
              "wsr", "mm", "mbd", "skullKnight", "darkMagician", "zoa", "ushiOni",
              "mountain", "fields", "dcj", "ath", "crushCard"]
+def best_equips(equips, n=6):
+    """Le tableur d'Exarion a 6 cases d'equipement (Megamorph a part) et fait la
+    moyenne de leur valeur : au-dela de 6, on garde les 6 meilleurs d'apres sa
+    table (Bright Castle > Dragon Treasure = Beast Fangs > Dark Energy >
+    Invigoration > Horn of Light)."""
+    order = ["Bright Castle", "Dragon Treasure", "Beast Fangs", "Dark Energy", "Invigoration", "Horn of Light"]
+    eq = [e for e in equips if e in order]
+    return sorted(eq, key=order.index)[:n]
+
+
 F6_EQUIPS = ["Bright Castle", "Dragon Treasure", "Dark Energy", "Beast Fangs",
              "Invigoration", "Horn of Light", "N/A"]
 F6_LABELS = {

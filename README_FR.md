@@ -25,9 +25,9 @@ En haut à droite, choisis **Jeu : PS2** (le logiciel redémarre), puis dans **F
 qui affiche le jeu : par exemple un projecteur OBS de la source de la carte d'acquisition
 (clic droit sur la source > Projecteur fenêtré). Cette fenêtre doit rester visible et ne montrer
 que le jeu, sans incrustation par-dessus.
-- **Cadrage automatique** : au premier duel, le logiciel cherche le panneau LP/COM/YOU et cale
-  tout seul le décalage vertical propre à ta carte d'acquisition (« Cadrage PS2 trouvé » dans le
-  journal). Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
+- **Cadrage automatique** : sur le menu de l'écran titre (NEW GAME / LOAD...) ou au premier duel,
+  le logiciel cale tout seul le décalage vertical propre à ta carte d'acquisition (« Cadrage PS2
+  trouvé » dans le journal) : il est donc prêt avant le premier check du deck. Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
 - **Chiffres** : la sortie vidéo de la PS2 rend les chiffres un peu différemment. Des chiffres PS2
   sont intégrés ; s'il en manque, ils apparaissent dans « Chiffres à nommer ».
 - Testé sur la run PS2 d'A3r1uS (vidéo YouTube) : run suivie du début à la fin, cadrage trouvé
@@ -77,11 +77,14 @@ au rang affiché par le jeu.
 
 Sur les écrans de construction du deck, le logiciel lit :
 - **écran DECK** : la position (01..40) et le numéro de chaque carte, le compteur du deck, la carte sous le curseur ;
-- **écran CHEST** : le numéro de chaque carte et ses exemplaires « dans le coffre / dans le deck ».
+- **écran CHEST** : seuls les **ajouts** comptent (une carte dont le nombre « dans le deck »
+  augmente) ; les retraits se lisent uniquement sur l'écran DECK.
 
-Il en déduit la composition du deck et compte chaque **ajout** et **retrait** (journal + totaux).
-Fais défiler une fois tout le deck (5 pages) pour une lecture complète ; ensuite chaque
-modification est suivie. Les types et ATK viennent de la base de YGO-FM-FusionCalc
+Le premier check du deck donne la base : fais défiler le deck une fois (R1, une page toutes les
+0,2 s environ ou plus lentement) ; le deck est complet quand toutes les positions jusqu'au compteur
+affiché sont lues (40, ou moins juste après un retrait). Ensuite seuls les ajouts et retraits le
+modifient. Les exemplaires multiples sont comptés. Vérifié en direct sur ePSXe : 40/40 cartes avec
+R1 toutes les 0,2 s, même résultat qu'une lecture lente. Les types et ATK viennent de la base de YGO-FM-FusionCalc
 (`tools/make_carddb.py`), identique à la liste de yugiohfm.com.
 
 ## Final 6
@@ -92,6 +95,8 @@ du Final 6 se recalcule tout seul. Le calcul utilise les formules du tableur
 dans `fm_speedtool/assets/f6_model.xlsx`, et le test redonne au chiffre près les valeurs d'Excel.
 « Dark Hole » se coche si tu commences avec Dark Hole au lieu de Raigeki ; les Raigeki/Dark Hole
 en plus se comptent comme Crush Card (règle du tableur).
+Équipements : un compteur par type, plusieurs exemplaires possibles (Megamorph a sa propre case) ;
+le tableur a 6 cases d'équipement, donc au-delà de 6 les 6 meilleurs comptent.
 Le bouton « Ouvrir aussi sur fusion.lukadevv.com » copie un lien à coller via IMPORT sur le site.
 
 ## Mots de passe

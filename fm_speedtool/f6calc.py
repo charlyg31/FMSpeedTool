@@ -73,7 +73,7 @@ class F6Calculator:
     def compute(self, counts, dark_hole, equips):
         """counts : champs fmlogic.F6_FIELDS ; equips : noms (6 max).
         Retourne {duelliste: proba, ..., "Final 6": proba}."""
-        eq = [e for e in equips if e in fmlogic.F6_EQUIPS and e != "N/A"][:6]
+        eq = fmlogic.best_equips(equips)
         eq += ["N/A"] * (6 - len(eq))
         args = [int(counts.get(f, 0)) for f in FIELD_CELLS] + [1 if dark_hole else 0] + eq
         res = self.func(*args)

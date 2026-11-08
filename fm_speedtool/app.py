@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
     "ps2_framing": None,          # [dy, sy] cadrage PS2 trouve (None : a chercher)
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False},
-    "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": ["N/A"] * 6,
+    "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
 }
 
 
@@ -451,14 +451,21 @@ class App:
             self.f6_vars[field] = v
         self.dark_hole = tk.BooleanVar(value=self.cfg["dark_hole"])
         ttk.Checkbutton(box, text=_("Dark Hole (au lieu de Raigeki)"), variable=self.dark_hole).pack(anchor="w")
+        # Equipements : un compteur par type (plusieurs exemplaires possibles). Le
+        # tableur n'a que 6 cases : au-dela, les 6 meilleurs sont gardes.
         eq = ttk.Frame(box)
         eq.pack(anchor="w")
-        self.equip_vars = []
-        for i in range(6):
-            v = tk.StringVar(value=self.cfg["equips"][i] if i < len(self.cfg["equips"]) else "N/A")
-            ttk.Combobox(eq, textvariable=v, values=fmlogic.F6_EQUIPS, state="readonly",
-                         width=13).grid(row=i // 2, column=i % 2, padx=1, pady=1)
-            self.equip_vars.append(v)
+        ttk.Label(eq, text=_("Equipements (Megamorph a part) :")).grid(row=0, column=0, columnspan=6, sticky="w")
+        saved = [e for e in self.cfg.get("equips", []) if e != "N/A"]
+        self.equip_vars = {}
+        for i, name in enumerate(n for n in fmlogic.F6_EQUIPS if n != "N/A"):
+            v = tk.IntVar(value=saved.count(name))
+            ttk.Label(eq, text=name).grid(row=1 + i // 3, column=(i % 3) * 2, sticky="w")
+            ttk.Spinbox(eq, from_=0, to=3, width=2, textvariable=v).grid(
+                row=1 + i // 3, column=(i % 3) * 2 + 1, padx=(2, 8))
+            self.equip_vars[name] = v
+        self.equip_note = tk.StringVar()
+        ttk.Label(eq, textvariable=self.equip_note, foreground="#777").grid(row=3, column=0, columnspan=6, sticky="w")
 
         res = ttk.Frame(box)
         res.pack(fill="x", pady=(2, 4), before=grid)   # resultat en haut du panneau
@@ -473,7 +480,7 @@ class App:
             self.f6_each[name] = v
         ttk.Button(box, text=_("Ouvrir aussi sur fusion.lukadevv.com"), command=self._open_f6).pack(fill="x", pady=4)
 
-        for v in list(self.f6_vars.values()) + self.equip_vars + [self.dark_hole]:
+        for v in list(self.f6_vars.values()) + list(self.equip_vars.values()) + [self.dark_hole]:
             v.trace_add("write", lambda *_a: self._schedule_f6())
         self.f6 = f6calc.F6Calculator(os.path.join(BASE_DIR, "assets", "f6_model.xlsx"))
         threading.Thread(target=self._load_f6, daemon=True).start()
@@ -488,7 +495,7 @@ class App:
         """Recopie le deck lu a l'ecran dans les compteurs du Final 6."""
         w = self.deck.watcher
         n, complete = w.summary()
-        state = _("complet") if complete else _("fais defiler tout le deck une fois")
+        state = _("complet") if complete else _("pages utiles lues")
         self.deck_info.set(_("Deck : {n}/40 ({state})   Ajouts : {added}   Retraits : {removed}",
                              n=n, state=state, added=len(w.added), removed=len(w.removed)))
         if not self.deck_auto.get() or self.deck.version == self._deck_version or n == 0:
@@ -498,8 +505,8 @@ class App:
         for k, v in self.f6_vars.items():
             v.set(counts.get(k, 0))
         self.dark_hole.set(dark_hole)
-        for i, v in enumerate(self.equip_vars):
-            v.set(equips[i] if i < len(equips) else "N/A")
+        for name, v in self.equip_vars.items():
+            v.set(equips.count(name))
 
     def _load_f6(self):
         self.f6.load()
@@ -517,7 +524,12 @@ class App:
                 counts[k] = max(0, int(v.get()))
             except (tk.TclError, ValueError):
                 counts[k] = 0
-        equips = [v.get() for v in self.equip_vars if v.get() != "N/A"]
+        equips = []
+        for name, v in self.equip_vars.items():
+            try:
+                equips += [name] * max(0, int(v.get()))
+            except (tk.TclError, ValueError):
+                pass
         return counts, self.dark_hole.get(), equips
 
     def _update_f6(self):
@@ -525,7 +537,11 @@ class App:
         self._f6_job = None
         counts, dark_hole, equips = self._f6_inputs()
         self.cfg["f6"], self.cfg["dark_hole"] = counts, dark_hole
-        self.cfg["equips"] = [v.get() for v in self.equip_vars]
+        self.cfg["equips"] = equips
+        kept = fmlogic.best_equips(equips)
+        self.equip_note.set(_("{n} equipements : les 6 meilleurs comptent (limite du tableur)", n=len(equips))
+                            if len(equips) > 6 else "")
+        equips = kept
         self._save_config()
         if self.f6.error:
             self.f6_total.set(_("Tableur indisponible : utilise le site"))
@@ -551,7 +567,7 @@ class App:
 
     def _open_f6(self):
         counts, dark_hole, equips = self._f6_inputs()
-        url = fmlogic.f6_url(counts, dark_hole, equips)
+        url = fmlogic.f6_url(counts, dark_hole, fmlogic.best_equips(equips))
         self.root.clipboard_clear()
         self.root.clipboard_append(url)
         webbrowser.open("https://fusion.lukadevv.com/win-rate")

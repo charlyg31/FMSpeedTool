@@ -74,20 +74,42 @@ class Digits:
             self.vecs = list(data["vecs"].astype(np.float32))
             self.labels = [str(x) for x in data["labels"]]
 
-    def classify(self, c):
-        vec = self.glyph_fn(c)
+    def _nearest(self, c, fn):
+        vec = fn(c)
         if vec is None or not self.vecs:
-            return None
+            return None, 9.0
         if self._stack is None:
             self._stack = np.stack(self.vecs)
         d = np.abs(self._stack - vec).mean(axis=(1, 2))   # tous les gabarits d'un coup
         i = int(np.argmin(d))
-        return self.labels[i] if d[i] < 0.12 else None
+        return self.labels[i], float(d[i])
+
+    def classify(self, c):
+        ch, d = self._nearest(c, self.glyph_fn)
+        return ch if d < 0.12 else None
+
+    def classify_at(self, img, x, y, w, h):
+        """Lecture directe ; si elle echoue (image floue d'un stream, capture d'une
+        autre taille), on cherche a +-2 px et avec un seuil relatif, avec un seuil
+        un peu plus large. Verifie sur deux videos de stream : 24 lignes sur 24."""
+        ch = self.classify(img[y:y + h, x:x + w])
+        if ch is not None:
+            return ch
+        best = (None, 9.0)
+        for fn in (self.glyph_fn, white_glyph_rel) if self.glyph_fn is white_glyph else (self.glyph_fn,):
+            for dy in (-2, -1, 0, 1, 2):
+                for dx in (-2, -1, 0, 1, 2):
+                    if y + dy < 0 or x + dx < 0:
+                        continue
+                    r = self._nearest(img[y + dy:y + dy + h, x + dx:x + dx + w], fn)
+                    if r[1] < best[1]:
+                        best = r
+        return best[0] if best[1] < 0.17 else None
 
     def read(self, img, cells, w=CELL_W, h=CELL_H):
         text = ""
         for x, y in cells:
-            ch = self.classify(img[y:y + h, x:x + w])
+            ch = self.classify_at(img, x, y, w, h)
             if ch is None:
                 return None
             text += ch
@@ -165,6 +187,8 @@ class DeckWatcher:
     def __init__(self):
         self.deck = Counter()     # numero -> exemplaires (meilleure connaissance)
         self.known = set()        # cartes dont le nombre dans le deck est sur
+        self.chest_seen = {}      # numero -> (tic, exemplaires lus sur l'ecran CHEST)
+        self.slot_tick = {}       # numero -> tic de sa derniere lecture sur l'ecran DECK
         self.complete = False     # deck entierement lu au moins une fois
         self.added = []
         self.removed = []
@@ -202,6 +226,16 @@ class DeckWatcher:
             events.append((kind, cid))
         return events
 
+    def _check_complete(self):
+        # Toutes les positions de 1 au compteur affiche lues (40, ou moins juste apres
+        # un retrait) : composition exacte du deck.
+        n = self.count
+        if n and 1 <= n <= DECK_SIZE and all(p in self.slots for p in range(1, n + 1)):
+            self.slots = {p: c for p, c in self.slots.items() if p <= n}
+            self.deck = Counter(self.slots[p] for p in range(1, n + 1))
+            self.known = set(self.deck)
+            self.complete = True
+
     def deck_frame(self, img, digits, count_digits):
         rows = deck_rows(img, digits)
         count = deck_count(img, count_digits)
@@ -234,16 +268,23 @@ class DeckWatcher:
             self._deck_hl_card = rows[hl][1]
         self.slots.update(visible)
         for cid in visible.values():
+            self.slot_tick[cid] = self.tick
+        for cid in visible.values():
             self._seen(cid)
             if self.deck[cid] == 0:
                 self.deck[cid] = 1    # carte vue dans le deck : au moins un exemplaire
-        if self.count == DECK_SIZE and all(p in self.slots for p in range(1, DECK_SIZE + 1)):
-            self.deck = Counter(self.slots[p] for p in range(1, DECK_SIZE + 1))
-            self.known = set(self.deck)
-            self.complete = True
+        # Exemplaires multiples vus dans une meme lecture de la liste (positions
+        # recalees) : 3 positions avec la meme carte = au moins 3 exemplaires.
+        for cid, n in Counter(self.slots.values()).items():
+            if n > self.deck[cid]:
+                self.deck[cid] = n
+        self._check_complete()
         return events
 
     def chest_frame(self, img, digits, box_digits):
+        """Coffre : seuls les AJOUTS comptent. Si la case "dans le deck" d'une carte
+        augmente par rapport a ce qu'on sait, ce sont des ajouts. Une case plus basse
+        n'enleve rien (retraits : ecran DECK uniquement)."""
         rows = chest_rows(img, digits, box_digits)
         hl = chest_highlight(img)
         if not self._stable("chest", (tuple(sorted(rows.items())), hl)):
@@ -252,13 +293,9 @@ class DeckWatcher:
         for cid, _, in_deck in rows.values():
             if in_deck is None:
                 continue
-            if self.complete or cid in self.known:
-                diff = in_deck - self.deck[cid]
-                if diff:
-                    events += self._apply("+" if diff > 0 else "-", cid, abs(diff))
-                    self.slots = {}   # position inconnue : la liste devra etre relue
-            self.deck[cid] = in_deck
-            self.known.add(cid)
+            if (self.complete or cid in self.known) and in_deck > self.deck[cid]:
+                events += self._apply("+", cid, in_deck - self.deck[cid])
+                self.slots = {}   # position inconnue : la liste devra etre relue
             self._seen(cid)
         return events
 
@@ -266,8 +303,12 @@ class DeckWatcher:
         self._prev = None
 
     def cards(self):
-        """Deck estime, 40 cartes au plus : si on en connait trop (retraits jamais
-        observes), on ecarte d'abord les cartes vues il y a le plus longtemps."""
+        """Deck estime, 40 cartes au plus. Le premier passage sur le deck (trie par
+        type : dragons en haut, guerriers, thunders/eau/plantes, magies et
+        equipements en bas) donne la base, exemplaires compris ; ensuite seuls les
+        ajouts/retraits la modifient (pages decalees, compteur, cases de l'ecran
+        CHEST). Une carte simplement pas revue reste dans le deck. Si on connait plus
+        de 40 cartes (retrait jamais vu), on ecarte celles vues il y a le plus longtemps."""
         deck = Counter({c: n for c, n in self.deck.items() if n > 0})
         size = self.count or DECK_SIZE
         for cid in sorted(deck, key=lambda c: self.seen_at.get(c, -1)):
@@ -300,6 +341,7 @@ class DeckReader:
         if screen == "deck":
             events = self.watcher.deck_frame(img, self.deck_digits, self.count_digits)
         elif screen == "chest":
+            # Coffre : seuls les ajouts de cartes comptent (les retraits se voient sur l'ecran DECK).
             events = self.watcher.chest_frame(img, self.chest_digits, self.box_digits)
         else:
             self.watcher.other_frame()
@@ -357,6 +399,7 @@ def f6_counts(deck_ids, db):
         dark_hole += cid == DARK_HOLE
         kaminari += cid == KAMINARI_ATTACK
         if card.get("kind") == "Monster":
+            # Regle de la communaute : Thunder Dragon compte aussi comme (gros) Thunder.
             if card.get("type") == "Thunder":
                 c["thunders"] += 1
             # Dragon = type Dragon ou type secondaire Dragon (Dragon Statue, Dragon
@@ -371,4 +414,4 @@ def f6_counts(deck_ids, db):
     # Le tableur suppose un Raigeki ; les Raigeki/Dark Hole en plus sont des Crush Card.
     starts_dark_hole = dark_hole > 0 and raigeki == 0
     c["crushCard"] += max(0, raigeki + dark_hole - 1)
-    return c, starts_dark_hole, equips[:6]
+    return c, starts_dark_hole, equips          # tous ; le calcul garde les 6 meilleurs
