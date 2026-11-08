@@ -115,4 +115,6 @@ without it.
 Rank formula: game rank table (same as hippochan's FMRankCalc). Final 6 win rate: Exarion's
 "FM win rate calculator 2.1". Card data: YGO-FM-FusionCalc.
 
+Thanks to Hippochan, Exarion and lukadev for the information they shared.
+
 License: MIT.

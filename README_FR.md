@@ -120,4 +120,8 @@ python -m pytest tests          # tests
 Les tests qui rejouent des captures d'ePSXe ont besoin d'un dossier `captures/` (non publié) et sont
 ignorés sans lui.
 
+## Remerciements
+
+Merci à Hippochan, Exarion et lukadev pour les informations partagées.
+
 Licence MIT.
