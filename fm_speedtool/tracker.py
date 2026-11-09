@@ -35,6 +35,8 @@ EDGE_COOLDOWN = 1.5      # anti-rebond des gabarits
 FADE_WINDOW = 0.8        # NEW GAME valide : l'ecran titre s'assombrit dans ce delai
 NAME_ENTRY_GRACE = 30.0  # l'ecran du nom ne relance pas une run deja demarree
 POST_DUEL_IGNORE = 20.0  # portrait du vaincu dans le dialogue d'apres-duel
+FLASH_GAP = 0.3          # images blanches plus espacees : nouveau flash (video a 4 img/s : 0,25 s)
+GLOW_WITH_FLASH = 0.12   # halo d'equipement : commence avec son propre flash blanc
 REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defile = equipement)
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
@@ -99,6 +101,7 @@ class Tracker:
         self.reveal_until = 0.0           # flash vu : on attend la grande carte
         self.equip_until = 0.0
         self.last_flash = -1e9
+        self.flash_start = -1e9
         self.reveal_watch = None          # (debut, carte) : fusion ou equipement a confirmer
         self.battle = None
         self.manual = {k: 0 for k in fmlogic.RANK_TABLE}
@@ -364,10 +367,15 @@ class Tracker:
             self.on_event("stat", _("Magie pure +1"))
         flash = vision.white_flash(img) > 3000
         if flash:
+            if now - self.last_flash > FLASH_GAP:
+                self.flash_start = now          # debut de ce flash
             self.last_flash = now
-        # Halo violet = equipement, sauf juste apres le flash d'une fusion : c'est alors
-        # l'illustration rose-violet de la carte revelee (Curse of Dragon...).
-        glow = vision.equip_glow(img) > 4000 and now - self.last_flash > 1.2 and not self.reveal_watch
+        # Halo violet = equipement. Apres le flash blanc d'une fusion, du violet est
+        # l'illustration de la carte revelee (Curse of Dragon..., 0,5 s apres le debut du
+        # flash) : ignore. L'explosion magenta d'un equipement fait elle-meme son flash
+        # blanc : halo et flash commencent ensemble.
+        glow = (vision.equip_glow(img) > 4000 and not self.reveal_watch
+                and (now - self.last_flash > 1.2 or now - self.flash_start <= GLOW_WITH_FLASH))
         if self._edge("equip_glow", glow, now):
             # Un equipement se termine par la grande carte du monstre equipe.
             self.reveal_until = 0.0

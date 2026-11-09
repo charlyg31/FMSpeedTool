@@ -21,7 +21,7 @@ SC = {"LEFT": (0x4B, True), "RIGHT": (0x4D, True), "UP": (0x48, True), "DOWN": (
       "X": (0x2D, False), "O": (0x2E, False), "SQ": (0x1F, False), "TRI": (0x20, False),
       "START": (0x1C, False), "SELECT": (0x39, False), "L1": (0x11, False),
       "R1": (0x13, False), "L2": (0x12, False), "R2": (0x14, False),
-      "F1": (0x3B, False), "F3": (0x3D, False), "ESC": (0x01, False), "F4": (0x3E, False)}
+      "F1": (0x3B, False), "F2": (0x3C, False), "F3": (0x3D, False), "ESC": (0x01, False), "F4": (0x3E, False)}
 
 KEYEVENTF_SCANCODE = 0x8
 KEYEVENTF_KEYUP = 0x2
@@ -55,8 +55,16 @@ def press(name, hold=0.08):
 
 
 def focus(cap):
+    """Donne le focus a ePSXe. Il faut passer par une autre fenetre : sinon, apres une perte
+    de focus, ePSXe garde ses touches F mais ne lit plus la manette."""
     cap.ensure_window()
-    user32.SetForegroundWindow(cap.hwnd)
+    if user32.GetForegroundWindow() != cap.hwnd:
+        user32.SetForegroundWindow(user32.GetShellWindow())
+        time.sleep(0.3)
+        user32.keybd_event(0x12, 0, 0, 0)          # Alt : Windows autorise le changement de focus
+        user32.SetForegroundWindow(cap.hwnd)
+        user32.keybd_event(0x12, 0, 2, 0)
+        time.sleep(0.8)
     time.sleep(0.2)
 
 
@@ -94,3 +102,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
