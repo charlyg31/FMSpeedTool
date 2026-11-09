@@ -485,7 +485,11 @@ def hud_present(img):
     # Encadre "FIELD" bleu marine en haut a gauche (absent des decors bleu/rouge).
     box = img[40:92, 28:132].astype(int)
     navy = ((box[..., 0] > box[..., 2] + 30) & (box[..., 0] > box[..., 1] + 15)).mean()
-    return navy > 0.25  # ~0.8 sans terrain, ~0.43 avec "FIELD MOUNTAIN"
+    if navy <= 0.25:     # ~0.8 sans terrain, ~0.43 avec "FIELD MOUNTAIN", 0,25-0,35 en stream / PS2
+        return False
+    # Peu de bleu marine : il faut aussi le texte blanc "FIELD" (~4 %). Le film d'intro
+    # (oeil bleu et orange, joue au demarrage et sur l'ecran titre inactif) n'en a pas.
+    return navy > 0.5 or (box.min(axis=2) > 170).mean() > 0.005
 
 
 def active_player(img):
