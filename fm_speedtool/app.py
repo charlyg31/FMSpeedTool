@@ -563,7 +563,11 @@ class App:
         state = _("complet") if complete else _("pages utiles lues")
         self.deck_info.set(_("Deck : {n}/40 ({state})   Ajouts : {added}   Retraits : {removed}",
                              n=n, state=state, added=len(w.added), removed=len(w.removed)))
-        if not self.deck_auto.get() or self.deck.version == self._deck_version or n == 0:
+        if not self.deck_auto.get() or self.deck.version == self._deck_version:
+            return
+        # Deck vide : au lancement (version 0), on garde les compteurs enregistres ; apres un
+        # NEW GAME (deck remis a zero, version > 0), on les remet a 0.
+        if n == 0 and self.deck.version == 0:
             return
         self._deck_version = self.deck.version
         counts, dark_hole, equips = self.deck.f6()
