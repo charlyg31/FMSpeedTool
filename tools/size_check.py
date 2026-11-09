@@ -43,6 +43,8 @@ def check(make_prepare):
     hud_img = cv2.imread(os.path.join(ROOT, "captures", "live1.png"))
     screens = {"title_newgame": "title1.png", "password_screen": "password.png",
                "orient_back": "d1.png", "new_run": "ng2.png"}
+    # Ecran d'orientation (dos de carte) : detecteurs dedies, pas des gabarits.
+    special = {"orient_back": lambda f: vision.orient_arrows(f) >= 0.65 and vision.card_back(f) >= 0.75}
     ok_all = True
     for name, size, side, top in VARIANTS:
         prepare_frame = make_prepare()
@@ -53,7 +55,8 @@ def check(make_prepare):
         found = []
         for action, file in screens.items():
             f = prepare_frame(variant(cv2.imread(os.path.join(ROOT, "captures", file)), size, side, top))
-            found.append(any(t.action == action for t in lib.matching(f)))
+            found.append(special[action](f) if action in special else
+                         any(t.action == action for t in lib.matching(f)))
         ok = good_hud and all(found)
         ok_all &= ok
         print(f"{name:32s} HUD {'OK' if good_hud else hud}  ecrans {sum(found)}/{len(found)}  {'OK' if ok else 'ECHEC'}")

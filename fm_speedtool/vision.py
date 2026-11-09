@@ -163,6 +163,54 @@ class Framing:
 
 
 _TITLE_REF = None
+_ORIENT = None
+ORIENT_BOXES = ((217, 250), (390, 250))   # fleches gauche / droite (28x28) de l'ecran d'orientation
+CARD_BACK_AT = (282, 197)                 # interieur du dos de carte au centre de cet ecran
+
+
+def _asset(name):
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return cv2.imread(os.path.join(base, "assets", name))
+
+
+def _arrow_features(img):
+    """Carre vert fonce (+1) et fleche jaune (-1) : ne depend pas de la couleur du terrain."""
+    b, g, r = [img[..., k].astype(np.int16) for k in range(3)]
+    green = (g > r + 20) & (g > b + 15) & (g > 30) & (g < 170)
+    yellow = (r > 140) & (g > 130) & (b < 120)
+    return green.astype(np.float32) - yellow.astype(np.float32)
+
+
+def _orient_refs():
+    global _ORIENT
+    if _ORIENT is None:
+        arrows, back = _asset("orient_arrows.png"), _asset("card_back.png")
+        _ORIENT = (_arrow_features(arrows[:, :28]), _arrow_features(arrows[:, 28:]),
+                   cv2.cvtColor(back, cv2.COLOR_BGR2GRAY))
+    return _ORIENT
+
+
+def orient_arrows(img, pad=14):
+    """Ecran d'orientation d'une carte posee (fleches jaunes sur carres verts de part et
+    d'autre de la carte) : plus petit des deux scores. Sur 4 videos : >= 0,7 sur cet
+    ecran, <= 0,6 ailleurs (seuil 0,65). Le gabarit gris d'avant tombait a 0,72 sur le terrain DARK
+    (Heishin 1, mages...) : les poses face cachee n'y etaient pas comptees."""
+    left, right, _back = _orient_refs()
+    scores = []
+    for (x, y), tpl in zip(ORIENT_BOXES, (left, right)):
+        reg = _arrow_features(img[y - pad:y + 28 + pad, x - pad:x + 28 + pad])
+        scores.append(float(cv2.matchTemplate(reg, tpl, cv2.TM_CCOEFF_NORMED).max()))
+    return min(scores)
+
+
+def card_back(img, pad=40):
+    """Dos de carte sur l'ecran d'orientation (interieur seul, sans le terrain autour) :
+    >= 0,8 dos de carte, <= 0,65 carte face visible, sur 4 videos."""
+    tpl = _orient_refs()[2]
+    x, y = CARD_BACK_AT
+    h, w = tpl.shape
+    gray = cv2.cvtColor(img[y - pad:y + h + pad, x - pad:x + w + pad], cv2.COLOR_BGR2GRAY)
+    return float(cv2.matchTemplate(gray, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
 def title_menu_score(img):

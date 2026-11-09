@@ -14,11 +14,10 @@ import vision  # noqa: E402
 OUT = os.path.join(ROOT, "fm_speedtool", "assets", "builtin")
 
 SPECS = [
+    # Ecran d'orientation (fleches, dos de carte) : vision.orient_arrows / card_back,
+    # assets/orient_arrows.png et card_back.png (gabarits gris trop sensibles au terrain).
     # (capture, nom, action, rect) ; "video/..." = image extraite de la video de run
     ("ng2", "Nouvelle partie (Input your NAME!)", "new_run", (110, 385, 260, 30)),
-    ("d1", "Orientation : fleche gauche", "orient_left", (217, 247, 26, 28), 90),
-    ("d1", "Orientation : fleche droite", "orient_right", (390, 247, 26, 28), 90),
-    ("d1", "Orientation : dos de carte", "orient_back", (272, 185, 96, 140), 90),
     ("title1", "Titre : NEW GAME surligne", "title_newgame", (215, 62, 210, 66)),
     ("video/v000276", "Titre : NEW GAME surligne (video)", "title_newgame", (215, 62, 210, 66)),
     ("video/v001060", "Ecran Free Duel", "free_duel", (170, 25, 300, 35)),

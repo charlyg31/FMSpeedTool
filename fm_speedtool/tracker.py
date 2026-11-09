@@ -509,21 +509,23 @@ class Tracker:
         de l'ecran (dos vu dans les ORIENT_END_WINDOW dernieres secondes ;
         il clignote, d'ou une fenetre plutot que la derniere image). Une pose
         annulee (carte remise en main) ne zoome pas sur le terrain."""
-        if self.facedown_until:
-            if now > self.facedown_until or "orient_right" in matches:
-                self.facedown_until = 0.0
-            elif vision.board_zoom(img):
-                self.facedown_until = 0.0
-                self.stats["facedown"] += 1
-                self.on_event("stat", _("Pose face cachee +1"))
-        if "orient_right" in matches:
+        arrows = vision.orient_arrows(img) >= 0.65
+        if arrows:
             if not self.orient_seen:
                 self.orient_back_at = None
             self.orient_seen = True
             self.orient_last_at = now
-            if "orient_back" in matches:
+            if vision.card_back(img) >= 0.75:
                 self.orient_back_at = now
         elif self.orient_seen:
             self.orient_seen = False
             if self.orient_back_at is not None and self.orient_last_at - self.orient_back_at <= ORIENT_END_WINDOW:
                 self.facedown_until = now + PLACE_CONFIRM
+        # Pose validee : la camera zoome sur le terrain (des l'image de sortie, a 4 img/s).
+        if self.facedown_until:
+            if now > self.facedown_until or arrows:
+                self.facedown_until = 0.0
+            elif vision.board_zoom(img):
+                self.facedown_until = 0.0
+                self.stats["facedown"] += 1
+                self.on_event("stat", _("Pose face cachee +1"))

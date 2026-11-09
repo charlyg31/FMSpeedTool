@@ -13,45 +13,6 @@
   "pad": 6
  },
  {
-  "name": "Orientation : fleche gauche",
-  "action": "orient_left",
-  "rect": [
-   217,
-   247,
-   26,
-   28
-  ],
-  "file": "t01_orient_left.png",
-  "threshold": 0.78,
-  "pad": 90
- },
- {
-  "name": "Orientation : fleche droite",
-  "action": "orient_right",
-  "rect": [
-   390,
-   247,
-   26,
-   28
-  ],
-  "file": "t02_orient_right.png",
-  "threshold": 0.78,
-  "pad": 90
- },
- {
-  "name": "Orientation : dos de carte",
-  "action": "orient_back",
-  "rect": [
-   272,
-   185,
-   96,
-   140
-  ],
-  "file": "t03_orient_back.png",
-  "threshold": 0.85,
-  "pad": 90
- },
- {
   "name": "Titre : NEW GAME surligne",
   "action": "title_newgame",
   "rect": [
@@ -60,7 +21,7 @@
    210,
    66
   ],
-  "file": "t04_title_newgame.png",
+  "file": "t01_title_newgame.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -73,7 +34,7 @@
    210,
    66
   ],
-  "file": "t05_title_newgame.png",
+  "file": "t02_title_newgame.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -86,7 +47,7 @@
    300,
    35
   ],
-  "file": "t06_free_duel.png",
+  "file": "t03_free_duel.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -99,7 +60,7 @@
    280,
    190
   ],
-  "file": "t07_you_win.png",
+  "file": "t04_you_win.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -112,7 +73,7 @@
    330,
    200
   ],
-  "file": "t08_you_lose.png",
+  "file": "t05_you_lose.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -125,7 +86,7 @@
    230,
    34
   ],
-  "file": "t09_opponent.png",
+  "file": "t06_opponent.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -138,7 +99,7 @@
    230,
    34
   ],
-  "file": "t10_opponent.png",
+  "file": "t07_opponent.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -151,7 +112,7 @@
    230,
    34
   ],
-  "file": "t11_opponent.png",
+  "file": "t08_opponent.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -164,7 +125,7 @@
    150,
    200
   ],
-  "file": "t12_opponent.png",
+  "file": "t09_opponent.png",
   "threshold": 0.85,
   "pad": 90
  },
@@ -177,7 +138,7 @@
    375,
    46
   ],
-  "file": "t13_results.png",
+  "file": "t10_results.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -190,7 +151,7 @@
    65,
    28
   ],
-  "file": "t14_winner_com.png",
+  "file": "t11_winner_com.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -203,7 +164,7 @@
    65,
    28
   ],
-  "file": "t15_winner_you.png",
+  "file": "t12_winner_you.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -216,7 +177,7 @@
    165,
    120
   ],
-  "file": "t16_game_menu.png",
+  "file": "t13_game_menu.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -229,7 +190,7 @@
    125,
    48
   ],
-  "file": "t17_deck_screen.png",
+  "file": "t14_deck_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -242,7 +203,7 @@
    135,
    40
   ],
-  "file": "t18_chest_screen.png",
+  "file": "t15_chest_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -255,7 +216,7 @@
    250,
    36
   ],
-  "file": "t19_password_screen.png",
+  "file": "t16_password_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -268,7 +229,7 @@
    72,
    28
   ],
-  "file": "t20_save_done.png",
+  "file": "t17_save_done.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -281,7 +242,7 @@
    72,
    28
   ],
-  "file": "t21_load_done.png",
+  "file": "t18_load_done.png",
   "threshold": 0.85,
   "pad": 6
  }
