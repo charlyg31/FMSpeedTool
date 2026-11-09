@@ -189,6 +189,9 @@ class DxgiGrabber:
         self.last = None
 
     def _camera_for(self, x, y, w, h):
+        """Ecran qui contient l'essentiel de la fenetre, et la partie visible dessus.
+        Une fenetre qui deborde de quelques pixels (bord gauche a -3 apres un
+        agrandissement) reste en DXGI : sinon copie GDI, 30 ms, ~29 img/s."""
         for idx in range(8):
             try:
                 cam = self.cams.get(idx) or self.dxcam.create(output_idx=idx, output_color="BGR")
@@ -198,16 +201,25 @@ class DxgiGrabber:
                 return None, None
             self.cams[idx] = cam
             d = cam._output.desc.DesktopCoordinates
-            if d.left <= x and d.top <= y and x + w <= d.right and y + h <= d.bottom:
-                return cam, (x - d.left, y - d.top, x - d.left + w, y - d.top + h)
+            x0, y0 = max(x, d.left), max(y, d.top)
+            x1, y1 = min(x + w, d.right), min(y + h, d.bottom)
+            if x1 > x0 and y1 > y0 and (x1 - x0) * (y1 - y0) >= 0.95 * w * h:
+                return cam, (x0 - d.left, y0 - d.top, x1 - d.left, y1 - d.top, x0 - x, y0 - y)
         return None, None
 
     def grab(self, rect):
         cam, region = self._camera_for(*rect)
         if cam is None:
             return None                   # fenetre a cheval sur deux ecrans : GDI
-        frame = cam.grab(region=region)
+        frame = cam.grab(region=region[:4])
         if frame is not None:
+            w, h = rect[2], rect[3]
+            if frame.shape[:2] != (h, w):
+                # Partie hors ecran : bandes noires (retirees ensuite avec les autres).
+                full = np.zeros((h, w, 3), np.uint8)
+                ox, oy = region[4], region[5]
+                full[oy:oy + frame.shape[0], ox:ox + frame.shape[1]] = frame
+                frame = full
             self.last = frame
         # Pas d'image neuve = ecran inchange depuis la derniere capture.
         return self.last if self.last is not None and self.last.shape[:2] == (rect[3], rect[2]) else None
