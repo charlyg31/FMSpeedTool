@@ -258,5 +258,31 @@
   "file": "t19_password_screen.png",
   "threshold": 0.85,
   "pad": 6
+ },
+ {
+  "name": "SAVE COMPLETE!",
+  "action": "save_done",
+  "rect": [
+   204,
+   190,
+   72,
+   28
+  ],
+  "file": "t20_save_done.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
+  "name": "LOAD COMPLETE!",
+  "action": "load_done",
+  "rect": [
+   204,
+   190,
+   72,
+   28
+  ],
+  "file": "t21_load_done.png",
+  "threshold": 0.85,
+  "pad": 6
  }
 ]

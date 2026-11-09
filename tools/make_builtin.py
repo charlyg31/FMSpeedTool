@@ -35,6 +35,9 @@ SPECS = [
     ("video/v007940", "Ecran DECK", "deck_screen", (490, 12, 125, 48)),
     ("video/v007920", "Ecran CHEST", "chest_screen", (15, 12, 135, 40)),
     ("password", "Ecran PASSWORD (STARCHIP)", "password_screen", (305, 74, 250, 36)),
+    # Seul le premier mot ("SAVE" / "LOAD") : "COMPLETE!" est commun aux deux.
+    ("save_done", "SAVE COMPLETE!", "save_done", (204, 190, 72, 28)),
+    ("load_done", "LOAD COMPLETE!", "load_done", (204, 190, 72, 28)),
 ]
 
 

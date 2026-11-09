@@ -17,7 +17,6 @@ startup
     settings.Add("split_win", true, "Split on win (campaign)");
     settings.Add("split_first_loss", true, "Split on first loss (Heishin 1)");
     settings.Add("split_farm", false, "Split at end of farm (back to menu)");
-    settings.Add("split_other", true, "Split on a learned screen (\"Direct split\" action)");
 
     vars.view = null;
     vars.mmf = null;
@@ -28,6 +27,9 @@ startup
     vars.oldSplit = 0;
     vars.oldReset = 0;
     vars.kind = 0;
+    vars.saveCount = 0;
+    vars.loadCount = 0;
+    vars.savedIndex = -1;      // split index at the last in-game save (SAVE COMPLETE!)
     vars.lastError = "";
 
     // Opens the shared block (fails while FMSpeedTool.exe is not running).
@@ -44,6 +46,9 @@ startup
             vars.startCount = vars.oldStart = view.ReadInt32(12);
             vars.splitCount = vars.oldSplit = view.ReadInt32(16);
             vars.resetCount = vars.oldReset = view.ReadInt32(20);
+            bool v2 = view.ReadInt32(4) >= 2;
+            vars.saveCount = v2 ? view.ReadInt32(56) : 0;
+            vars.loadCount = v2 ? view.ReadInt32(60) : 0;
             print("[FMSpeedTool] connected to FMSpeedTool.exe");
             vars.lastError = "";
             return true;
@@ -86,6 +91,27 @@ update
         vars.splitCount = vars.view.ReadInt32(16);
         vars.resetCount = vars.view.ReadInt32(20);
         vars.kind = vars.view.ReadInt32(24);
+        // Save/load counters exist from version 2 (before, bytes 56-63 held the opponent name).
+        bool v2 = vars.view.ReadInt32(4) >= 2;
+        int saves = v2 ? vars.view.ReadInt32(56) : 0;
+        int loads = v2 ? vars.view.ReadInt32(60) : 0;
+        if (timer.CurrentPhase == TimerPhase.NotRunning)
+            vars.savedIndex = -1;
+        // In-game save: remember where the run is.
+        if (saves != vars.saveCount && timer.CurrentPhase != TimerPhase.NotRunning)
+            vars.savedIndex = timer.CurrentSplitIndex;
+        // Save loaded (FM Speed Tool set to "undo"): undo the splits made since that save.
+        if (loads != vars.loadCount && vars.savedIndex >= 0)
+        {
+            var model = new TimerModel { CurrentState = timer };
+            int target = vars.savedIndex;
+            int guard = 100;
+            while (timer.CurrentPhase != TimerPhase.NotRunning && timer.CurrentSplitIndex > target && guard-- > 0)
+                model.UndoSplit();
+            print("[FMSpeedTool] save loaded: back to split " + target);
+        }
+        vars.saveCount = saves;
+        vars.loadCount = loads;
     }
     catch
     {
@@ -113,7 +139,7 @@ split
     if (kind == 1) return settings["split_win"];
     if (kind == 2) return settings["split_first_loss"];
     if (kind == 3) return settings["split_farm"];
-    return settings["split_other"];
+    return false;
 }
 
 exit

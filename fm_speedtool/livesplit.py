@@ -58,6 +58,16 @@ class LiveSplitClient:
     def start(self):
         self.send("starttimer")
 
+    def unsplit(self):
+        self.send("unsplit")
+
+    def split_index(self):
+        """Index du split en cours (-1 hors run) ou None si inconnu."""
+        try:
+            return int(self.query("getsplitindex"))
+        except (OSError, ValueError):
+            return None
+
     def timer_phase(self):
         """'NotRunning', 'Running', 'Ended', 'Paused' ou None si inconnu."""
         try:

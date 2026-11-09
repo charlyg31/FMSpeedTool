@@ -46,6 +46,7 @@ overlay on top.
 | First loss split (Heishin 1) | YOU LOSE / WINNER — COM |
 | Free Duel | "FREE DUEL / SELECT OPPONENT" screen: no split for those duels |
 | Farm | No split ("Split at end of farm" option off by default) |
+| Save loaded | SAVE COMPLETE! remembers how many splits are done; LOAD COMPLETE! (after a death, for example) brings the run back to that save. Option 1 (default): undo in LiveSplit the splits made since the save. Option 2: don't count the splits of the replayed duels |
 | Opponent | Name on the Free Duel screen, or portrait in the dialogue (Pegasus, Isis, Duel Master K) |
 | A-TEC target | Selected automatically against Pegasus |
 
@@ -125,10 +126,11 @@ To add a language:
 Shipped language files are in `fm_speedtool/lang`. After changing a text in the code,
 `python tools/make_lang.py` updates `template.json` and adds the missing strings to every language.
 
-## Learning
+## Options
 
-"Learn a screen…" opens a window with the game preview: "Freeze image", draw a rectangle, pick the
-action, "Learn". Your data goes to `%APPDATA%\FMSpeedTool`.
+The Options panel holds the timer and split options, what to do when a save is loaded (undo or
+don't count the replayed duels), the game sound, the language and the useful passwords.
+Your settings go to `%APPDATA%\FMSpeedTool`.
 
 ## Source code
 

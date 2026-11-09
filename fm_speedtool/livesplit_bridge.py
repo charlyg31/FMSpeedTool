@@ -8,7 +8,10 @@ Disposition (entiers 32 bits, petit-boutiste) :
   8  battement (images analysees, prouve que le logiciel tourne)
   12 compteur de departs   16 compteur de splits   20 compteur de resets
   24 type du dernier split (1 victoire, 2 1re defaite, 3 fin de farm, 4 autre)
-  32..63 nom de l'adversaire du dernier split (ASCII)
+  32..55 nom de l'adversaire du dernier split (ASCII)
+  56 compteur de sauvegardes (SAVE COMPLETE!) : le script retient le split en cours
+  60 compteur de retours a la sauvegarde (LOAD COMPLETE!) : le script annule les
+     splits faits depuis (Undo Split)
 """
 
 import mmap
@@ -17,7 +20,7 @@ import struct
 NAME = "FMSpeedTool_LiveSplit"
 SIZE = 64
 MAGIC = 0x54534D46          # 'FMST' lu en petit-boutiste
-VERSION = 1
+VERSION = 2
 KIND_WIN, KIND_FIRST_LOSS, KIND_FARM, KIND_OTHER = 1, 2, 3, 4
 
 
@@ -26,11 +29,13 @@ class Bridge:
         self.mem = mmap.mmap(-1, SIZE, tagname=NAME)
         self.heartbeat = 0
         self.counts = [0, 0, 0]          # departs, splits, resets
+        self.saves = self.loads = 0
         self._write_header()
 
     def _write_header(self):
         self.mem.seek(0)
         self.mem.write(struct.pack("<iiiiiii", MAGIC, VERSION, self.heartbeat, *self.counts, 0))
+        self.mem[56:64] = struct.pack("<ii", 0, 0)
 
     def beat(self):
         self.heartbeat = (self.heartbeat + 1) & 0x7FFFFFFF
@@ -49,9 +54,17 @@ class Bridge:
     def split(self, kind, opponent=""):
         # Type et adversaire d'abord : le script les lit quand le compteur change.
         self.mem[24:28] = struct.pack("<i", kind)
-        name = opponent.encode("ascii", "replace")[:31]
-        self.mem[32:64] = name + b"\0" * (32 - len(name))
+        name = opponent.encode("ascii", "replace")[:23]
+        self.mem[32:56] = name + b"\0" * (24 - len(name))
         self._bump(1)
+
+    def save(self):
+        self.saves += 1
+        self.mem[56:60] = struct.pack("<i", self.saves)
+
+    def load(self):
+        self.loads += 1
+        self.mem[60:64] = struct.pack("<i", self.loads)
 
     def close(self):
         self.mem.close()

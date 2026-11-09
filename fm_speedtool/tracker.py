@@ -2,7 +2,7 @@
 
 Tout vient de l'image : HUD du duel (LP, cartes restantes, joueur actif),
 gabarits integres (titre, Free Duel, YOU WIN / YOU LOSE, adversaires, pose
-face cachee...) et gabarits appris par l'utilisateur.
+face cachee, SAVE / LOAD COMPLETE...).
 """
 
 import time
@@ -11,22 +11,6 @@ import fmlogic
 import vision
 from i18n import N_, _
 
-# Actions possibles pour un gabarit appris (cle -> libelle).
-LEARN_ACTIONS = {
-    "fusion": N_("+1 Fusion"),
-    "equip": N_("+1 Equipement"),
-    "magic": N_("+1 Magie pure"),
-    "trap": N_("+1 Piege declenche"),
-    "eff_atk": N_("+1 Attaque efficace"),
-    "def_win": N_("+1 Victoire en defense"),
-    "facedown": N_("+1 Pose face cachee"),
-    "opponent": N_("Adversaire (le nom = celui du gabarit)"),
-    "you_win": N_("Victoire (YOU WIN)"),
-    "you_lose": N_("Defaite (YOU LOSE)"),
-    "free_duel": N_("Ecran Free Duel"),
-    "new_run": N_("Nouvelle partie (reset + depart)"),
-    "split": N_("Split direct"),
-}
 STAT_ACTIONS = ("fusion", "equip", "magic", "trap", "eff_atk", "def_win", "facedown")
 
 HUD_ON_FRAMES = 3        # images consecutives pour valider l'apparition du HUD
@@ -48,11 +32,14 @@ class Tracker:
     def __init__(self, digits, builtin, learned, on_event, deck=None):
         self.digits = digits
         self.builtin = builtin
-        self.learned = learned
+        self.learned = learned            # gabarits en plus (tests) ou None
         self.deck = deck                  # deckscreen.DeckReader (lecture du deck) ou None
         self.on_event = on_event          # callback(type, message)
         self.options = {"split_first_loss": True, "auto_reset": True, "auto_start": True,
-                        "split_farm_v2": False}
+                        "split_farm_v2": False,
+                        # Chargement d'une sauvegarde : "undo" annule dans LiveSplit les splits
+                        # faits depuis cette sauvegarde ; "skip" ignore les N prochains.
+                        "load_mode": "undo"}
         self.edges = {}
         self.last_split = (SPLIT_OTHER, "")
         self.area = vision.GameArea()     # zone de jeu dans la fenetre (bandes noires)
@@ -77,6 +64,9 @@ class Tracker:
         self.wins = 0
         self.free_wins = 0
         self.history = []                 # un element par duel termine de la run
+        self.split_counts = {}            # splits envoyes a LiveSplit pendant la run, par type
+        self.skip_splits = {}             # par type : prochains splits a ignorer (duels rejoues)
+        self.save_point = None            # ({type: splits atteints}, victoires, defaites) a la sauvegarde
         self.pending_split = None         # (message, echeance) : split au RESULTS OF DUEL
         self.in_duel = False
         self.free_duel = False            # mode du duel en cours / a venir
@@ -141,10 +131,11 @@ class Tracker:
         self.last_frame = img
         prep = vision.prepare(img)
         matches = {t.action: t for t in self.builtin.matching(img, prep)}
-        for t in self.learned.matching(img, prep):
-            matches.setdefault(t.action, t)
-            if t.action == "opponent":
-                matches["opponent"] = t
+        if self.learned is not None:
+            for t in self.learned.matching(img, prep):
+                matches.setdefault(t.action, t)
+                if t.action == "opponent":
+                    matches["opponent"] = t
         self._title(img, matches, now)
         if self._edge("name_entry", "new_run" in matches, now) and now - self.last_new_run > NAME_ENTRY_GRACE:
             self._new_run(now, _("ecran du nom"))
@@ -166,6 +157,10 @@ class Tracker:
                 self.on_event("stat", _(fmlogic.STAT_LABELS[a]) + " +1")
         if self._edge("split", "split" in matches, now):
             self._split(SPLIT_OTHER, _("Split ({name})", name=matches["split"].name))
+        if self._edge("save_done", "save_done" in matches, now):
+            self._save()
+        if self._edge("load_done", "load_done" in matches, now):
+            self._load()
 
         self.on_password_screen = "password_screen" in matches
         if self.deck is not None:
@@ -206,8 +201,49 @@ class Tracker:
 
     def _split(self, kind, msg, opponent=""):
         """Signale un split ; last_split dit lequel (le script LiveSplit filtre dessus)."""
+        if self.skip_splits.get(kind):
+            # Duel rejoue apres un chargement : ce split a deja ete fait.
+            self.skip_splits[kind] -= 1
+            self.on_event("info", _("{msg} : ignore (deja fait avant le chargement, encore {n})",
+                                    msg=msg, n=sum(self.skip_splits.values())))
+            return
+        self.split_counts[kind] = self.split_counts.get(kind, 0) + 1
         self.last_split = (kind, opponent)
         self.on_event("split", msg)
+
+    def _reached(self):
+        """Splits par type deja faits dans le jeu (ceux encore a ignorer seront refaits)."""
+        return {k: n - self.skip_splits.get(k, 0) for k, n in self.split_counts.items()}
+
+    def _save(self):
+        """SAVE COMPLETE! : retient ou en est la run (splits deja faits dans le jeu)."""
+        reached = self._reached()
+        self.save_point = (reached, self.wins, self.losses)
+        self.on_event("save", _("Sauvegarde : {n} split(s) faits a ce point", n=sum(reached.values())))
+
+    def _load(self):
+        """LOAD COMPLETE! : la run revient a la derniere sauvegarde vue. Les splits faits
+        depuis sont annules (undo) ou les prochains sont ignores (skip). Le skip compte par
+        type : une defaite qui splittait et n'est pas rejouee ne mange pas une victoire."""
+        if self.save_point is None:
+            self.on_event("info", _("Chargement : aucune sauvegarde vue pendant cette run, rien a corriger"))
+            return
+        reached, self.wins, self.losses = self.save_point
+        self.pending_split = None
+        extra = {k: n - reached.get(k, 0) for k, n in self.split_counts.items()
+                 if n - reached.get(k, 0) > 0}
+        total = sum(extra.values())
+        if not total:
+            self.skip_splits = {}
+            self.on_event("info", _("Chargement : aucun split depuis la sauvegarde"))
+            return
+        if self.options.get("load_mode", "undo") == "skip":
+            self.skip_splits = extra
+            self.on_event("info", _("Chargement : les {n} prochain(s) split(s) seront ignores", n=total))
+        else:
+            self.split_counts = dict(reached)
+            self.skip_splits = {}
+            self.on_event("undo", _("Chargement : {n} split(s) annule(s) dans LiveSplit", n=total))
 
     def _edge(self, key, active, now):
         """Front montant avec anti-rebond."""
@@ -232,8 +268,12 @@ class Tracker:
         if self.title_left_at is None:
             self.title_left_at = now
         # Boutons du menu partis (score ~0,2 contre 0,63 a 0,85 menu en place).
-        pressed = now - self.title_left_at <= 0.15 and vision.title_menu_score(img) < 0.4
-        if pressed or bright < self.title_armed * 0.7:
+        menu_gone = vision.title_menu_score(img) < 0.4
+        pressed = now - self.title_left_at <= 0.15 and menu_gone
+        # Fondu au noir : le menu doit aussi etre parti. A l'arrivee du menu, la 1re image
+        # avec NEW GAME surligne garde un reste du flash blanc du titre (~40 % plus
+        # claire) : curseur descendu sur LOAD juste apres = faux fondu sinon (video du 20/10).
+        if pressed or (bright < self.title_armed * 0.7 and menu_gone):
             self.title_armed = None
             self._new_run(now, "NEW GAME")
         elif now - self.title_left_at > FADE_WINDOW:

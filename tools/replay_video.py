@@ -37,6 +37,7 @@ def main(folder, start=0, end=10 ** 9):
             print("        stats:", tr.rank_stats())
 
     tr = tracker.Tracker(digits, builtin, learned, on_event)
+    tr.options["load_mode"] = os.environ.get("FM_LOAD_MODE", "undo")   # chargement d'une save
     if os.environ.get("FM_AUDIO"):
         # Son de la video (WAV mono 22,05 kHz) : decide fusion / equipement.
         import audio
@@ -51,7 +52,7 @@ def main(folder, start=0, end=10 ** 9):
         for r in csv.DictReader(f):
             v = int(r["split_row"])
             if v != -1 and prev is not None and v != prev:
-                real[int(r["i"])] = v
+                real[int(r["i"])] = (prev, v)
             if v != -1:
                 prev = v
     i = start
@@ -61,7 +62,10 @@ def main(folder, start=0, end=10 ** 9):
             break
         state["i"] = i
         if i in real:
-            print(f"{i:6d} {i / FPS / 60:6.1f}min  ---------- SPLIT LIVESPLIT REEL")
+            # Bandeau du split courant qui descend = split, qui remonte = undo / reset.
+            a, b = real[i]
+            print(f"{i:6d} {i / FPS / 60:6.1f}min  ---------- " +
+                  ("SPLIT LIVESPLIT REEL" if b > a else f"LIVESPLIT REMONTE ({a} -> {b})"))
         tr.process(img, now=i / FPS, normalized=True)
         i += 1
 

@@ -30,7 +30,6 @@ APP_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FMSp
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
-PREVIEW = (480, 384)   # apercu de la fenetre d'apprentissage
 FPS_TARGET = 60
 
 DEFAULT_CONFIG = {
@@ -41,7 +40,8 @@ DEFAULT_CONFIG = {
     "ps2_framing": None,          # [dy, sy] cadrage PS2 trouve (None : a chercher)
     "use_audio": True,            # le son du jeu tranche entre fusion et equipement
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
-    "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False},
+    "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
+                "load_mode": "undo"},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
 }
 
@@ -73,6 +73,7 @@ class Worker(threading.Thread):
         self.window_ok = False
         self.fps = 0.0
         self.running = True
+        self.ls_saved_index = None        # TCP : split en cours a la derniere sauvegarde
 
     def on_event(self, kind, msg):
         self.events.put((kind, msg))
@@ -80,16 +81,21 @@ class Worker(threading.Thread):
             fr = self.app.tracker.framing
             self.app.cfg["ps2_framing"] = [fr.dy, fr.sy]
             self.app._save_config()
-        if kind not in ("split", "new_run"):
+        if kind not in ("split", "new_run", "save", "undo"):
             return
         opts = self.app.tracker.options
         if self.app.cfg["livesplit_mode"] == "script":
             # Le script FMSpeedTool.asl lit ces compteurs ; ses cases Start/Split/Reset decident.
+            # Sauvegarde : il retient le split en cours ; chargement : il revient a ce split.
             bridge = self.app.bridge
             if bridge is None:
                 return
             if kind == "split":
                 bridge.split(*self.app.tracker.last_split)
+            elif kind == "save":
+                bridge.save()
+            elif kind == "undo":
+                bridge.load()
             else:
                 bridge.reset()
                 bridge.start()
@@ -98,7 +104,15 @@ class Worker(threading.Thread):
         try:
             if kind == "split":
                 ls.split()
+            elif kind == "save":
+                self.ls_saved_index = ls.split_index()
+            elif kind == "undo":
+                idx = ls.split_index()
+                if self.ls_saved_index is not None and idx is not None:
+                    for _i in range(idx - self.ls_saved_index):
+                        ls.unsplit()
             else:
+                self.ls_saved_index = None
                 if opts["auto_reset"]:
                     ls.reset()
                 if opts["auto_start"]:
@@ -154,11 +168,10 @@ class App:
             os.path.join(APP_DIR, "digits_ps2.json" if ps2 else "digits.json"),
             os.path.join(BASE_DIR, "assets", "digits_ps2_default.json" if ps2 else "digits_default.json"))
         self.builtin = vision.TemplateLibrary(BUILTIN_DIR)
-        self.learned = vision.TemplateLibrary(os.path.join(APP_DIR, "templates"))
         self.worker = None
         self.deck = deckscreen.DeckReader(os.path.join(BASE_DIR, "assets"))
         self._deck_version = -1
-        self.tracker = tracker.Tracker(self.digits, self.builtin, self.learned,
+        self.tracker = tracker.Tracker(self.digits, self.builtin, None,
                                        lambda k, m: self.worker.on_event(k, m), deck=self.deck)
         self.tracker.options.update(self.cfg["options"])
         if ps2:
@@ -175,13 +188,13 @@ class App:
         page.columnconfigure(1, weight=2)
         page.columnconfigure(2, weight=3)
         page.rowconfigure(1, weight=1)
-        page.rowconfigure(2, weight=0)   # barre "Apprentissage" + chiffres : compacte
+        page.rowconfigure(2, weight=0)   # options + chiffres : compacts
 
         self._build_status(page)
         self._build_rank(self._box(page, _("Duel en cours - rang"), 1, 0))
         self._build_f6(self._box(page, "Final 6", 1, 1))
         self._build_log(self._box(page, _("Historique des duels"), 1, 2))
-        self._build_learn(self._box(page, _("Apprentissage"), 2, 0, colspan=2))
+        self._build_options(self._box(page, _("Options"), 2, 0, colspan=2))
         self._build_digits(self._box(page, _("Chiffres a nommer"), 2, 2))
         self._build_passwords()
 
@@ -241,28 +254,53 @@ class App:
         # La ligne d'etat prend la place restante (placee apres : le choix du jeu reste entier).
         ttk.Label(top, textvariable=self.status, font=("Segoe UI", 10)).pack(side="left")
 
-        opts = ttk.Frame(page)
-        opts.grid(row=4, column=0, columnspan=3, sticky="w")
+    def _build_options(self, box):
+        """Options de la run, du chargement d'une sauvegarde, du son et de la langue."""
         self.opt_vars = {}
-        for key, text in (("auto_reset", _("Reset auto (NEW GAME)")),
-                          ("auto_start", _("Demarrer le timer (NEW GAME)")),
-                          ("split_first_loss", _("Split 1re defaite (Heishin 1)")),
-                          ("split_farm_v2", _("Split fin de farm (desactive : pas de farm)"))):
-            v = tk.BooleanVar(value=self.tracker.options[key])
-            v.trace_add("write", lambda *_a, k=key, var=v: self._set_option(k, var.get()))
-            ttk.Checkbutton(opts, text=text, variable=v).pack(side="left", padx=4)
-            self.opt_vars[key] = v
+        box.columnconfigure(1, weight=1)
+
+        def row(r, title):
+            ttk.Label(box, text=title).grid(row=r, column=0, sticky="w", pady=2)
+            f = ttk.Frame(box)
+            f.grid(row=r, column=1, sticky="ew", pady=2)
+            return f
+
+        for r, title, keys in ((0, _("Timer :"), (("auto_reset", _("Reset auto (NEW GAME)")),
+                                                   ("auto_start", _("Demarrer le timer (NEW GAME)")))),
+                               (1, _("Splits :"), (("split_first_loss", _("Split 1re defaite (Heishin 1)")),
+                                                    ("split_farm_v2", _("Split fin de farm"))))):
+            line = row(r, title)
+            for key, text in keys:
+                v = tk.BooleanVar(value=self.tracker.options[key])
+                v.trace_add("write", lambda *_a, k=key, var=v: self._set_option(k, var.get()))
+                ttk.Checkbutton(line, text=text, variable=v).pack(side="left", padx=4)
+                self.opt_vars[key] = v
+
+        # Chargement d'une sauvegarde du jeu (LOAD) : les duels rejoues ne doivent pas
+        # splitter une 2e fois.
+        load = row(2, _("LOAD d'une save :"))
+        self.load_mode = tk.StringVar(value=self.tracker.options.get("load_mode", "undo"))
+        self.load_mode.trace_add("write", lambda *_a: self._set_option("load_mode", self.load_mode.get()))
+        ttk.Radiobutton(load, text=_("1 : annuler les splits faits depuis la save (Undo)"),
+                        value="undo", variable=self.load_mode).pack(side="left", padx=4)
+        ttk.Radiobutton(load, text=_("2 : ne pas compter les splits des duels rejoues"),
+                        value="skip", variable=self.load_mode).pack(side="left", padx=4)
+
+        misc = ttk.Frame(box)
+        misc.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         self.audio_var = tk.BooleanVar(value=self.cfg.get("use_audio", True))
         self.audio_var.trace_add("write", lambda *_a: self._set_audio())
-        ttk.Checkbutton(opts, text=_("Son (fusion / equipement)"), variable=self.audio_var).pack(side="left", padx=4)
+        ttk.Checkbutton(misc, text=_("Son (fusion / equipement)"), variable=self.audio_var).pack(side="left", padx=4)
         # Langue : fichiers lang/<code>.json (voir i18n.py) ; change au redemarrage.
         self.langs = i18n.available()
         names = sorted(self.langs.values())
         self.lang_var = tk.StringVar(value=self.langs.get(i18n.current, i18n.current))
-        lang_box = ttk.Combobox(opts, textvariable=self.lang_var, values=names, state="readonly", width=12)
-        lang_box.pack(side="left", padx=4)
+        ttk.Label(misc, text="Langue / Language :").pack(side="left", padx=(24, 4))
+        lang_box = ttk.Combobox(misc, textvariable=self.lang_var, values=names, state="readonly", width=12)
+        lang_box.pack(side="left")
         lang_box.bind("<<ComboboxSelected>>", lambda e: self._set_language())
-        ttk.Label(opts, text="Langue / Language :").pack(side="left", padx=(24, 0), before=lang_box)
+        ttk.Button(misc, text=_("Mots de passe utiles"),
+                   command=lambda: self._set_pw_manual(True)).pack(side="right", padx=4)
 
     def _setup_audio(self):
         """Le son du jeu (ePSXe seul) tranche entre fusion et equipement apres un flash."""
@@ -600,20 +638,6 @@ class App:
         webbrowser.open("https://fusion.lukadevv.com/win-rate")
         self._log(_("Lien Final 6 copie : clique IMPORT sur la page et colle (Ctrl+V)"))
 
-    # --- vue du jeu + apprentissage -------------------------------------------------
-
-    def _build_learn(self, box):
-        """Sur la page : un simple bouton. L'apercu du jeu (qui prenait de la
-        place) n'apparait que dans la fenetre d'apprentissage."""
-        self.learn_win = None
-        self.frozen = None
-        self.sel = None
-        ttk.Button(box, text=_("Apprendre un ecran..."), command=self._open_learn).pack(side="left")
-        self.learn_count = tk.StringVar()
-        ttk.Label(box, textvariable=self.learn_count, foreground="#777").pack(side="left", padx=8)
-        ttk.Button(box, text=_("Mots de passe utiles"),
-                   command=lambda: self._set_pw_manual(True)).pack(side="left", padx=12)
-
     # --- mots de passe (ecran PASSWORD du jeu) ----------------------------------------
 
     def _build_passwords(self):
@@ -665,108 +689,6 @@ class App:
             self.pw_back.pack_forget()
             self.pw_view.pack_forget()
             self.page.pack(fill="both", expand=True)
-
-    def _open_learn(self):
-        if self.learn_win is not None:
-            self.learn_win.lift()
-            return
-        win = self.learn_win = tk.Toplevel(self.root)
-        win.title(_("Apprendre un ecran"))
-        win.protocol("WM_DELETE_WINDOW", self._close_learn)
-        self.canvas = tk.Canvas(win, width=PREVIEW[0], height=PREVIEW[1], bg="black", cursor="cross")
-        self.canvas.pack(side="left", padx=6, pady=6)
-        self.canvas.bind("<ButtonPress-1>", self._sel_start)
-        self.canvas.bind("<B1-Motion>", self._sel_move)
-
-        right = ttk.Frame(win, padding=(8, 6))
-        right.pack(side="left", fill="both", expand=True)
-        row = ttk.Frame(right)
-        row.pack(fill="x")
-        self.freeze_btn = ttk.Button(row, text=_("Figer l'image"), command=self._toggle_freeze)
-        self.freeze_btn.pack(side="left")
-        self.learn_name = tk.StringVar()
-        ttk.Entry(row, textvariable=self.learn_name, width=16).pack(side="left", padx=4)
-        self.learn_action = tk.StringVar(value=_(tracker.LEARN_ACTIONS["fusion"]))
-        ttk.Combobox(row, textvariable=self.learn_action, state="readonly", width=34,
-                     values=[_(v) for v in tracker.LEARN_ACTIONS.values()]).pack(side="left")
-        ttk.Button(row, text=_("Apprendre"), command=self._learn).pack(side="left", padx=4)
-        ttk.Label(right, foreground="#777", text=_("Fige l'ecran voulu, trace un rectangle sur une zone "
-                         "qui le caracterise, choisis l'action. Score en direct (1,00 = identique) :")).pack(anchor="w")
-        self.learn_list = tk.Listbox(right, height=12, width=60)
-        self.learn_list.pack(fill="both", expand=True)
-        ttk.Button(right, text=_("Supprimer l'ecran selectionne"), command=self._unlearn).pack(anchor="w")
-
-    def _close_learn(self):
-        self.learn_win.destroy()
-        self.learn_win = None
-        self.frozen = None
-        self.sel = None
-
-    def _toggle_freeze(self):
-        if self.frozen is None and self.tracker.last_frame is not None:
-            self.frozen = self.tracker.last_frame.copy()
-            self.freeze_btn.config(text=_("Reprendre"))
-        else:
-            self.frozen = None
-            self.sel = None
-            self.freeze_btn.config(text=_("Figer l'image"))
-
-    def _sel_start(self, e):
-        self.sel = [e.x, e.y, e.x, e.y]
-
-    def _sel_move(self, e):
-        if self.sel:
-            self.sel[2], self.sel[3] = e.x, e.y
-
-    def _learn(self):
-        if self.frozen is None or not self.sel:
-            messagebox.showinfo(_("Apprentissage"), _("Fige d'abord l'image puis trace un rectangle."))
-            return
-        sx, sy = vision.W / PREVIEW[0], vision.H / PREVIEW[1]
-        x0, x1 = sorted((self.sel[0], self.sel[2]))
-        y0, y1 = sorted((self.sel[1], self.sel[3]))
-        rect = (int(x0 * sx), int(y0 * sy), int((x1 - x0) * sx), int((y1 - y0) * sy))
-        if rect[2] < 8 or rect[3] < 8:
-            messagebox.showinfo(_("Apprentissage"), _("Rectangle trop petit."))
-            return
-        action = next(k for k, v in tracker.LEARN_ACTIONS.items() if _(v) == self.learn_action.get())
-        name = self.learn_name.get().strip() or _(tracker.LEARN_ACTIONS[action])
-        with self.worker.lock:
-            self.learned.add(name, action, rect, self.frozen)
-        self._log(_("Ecran appris : {name}", name=name))
-        self._toggle_freeze()
-
-    def _unlearn(self):
-        sel = self.learn_list.curselection()
-        if sel:
-            with self.worker.lock:
-                self.learned.remove(sel[0])
-
-    def _refresh_learn(self):
-        n = len(self.learned.items)
-        self.learn_count.set(_("{n} ecran(s) appris", n=n) if n else "")
-        if self.learn_win is None:
-            return
-        img = self.frozen if self.frozen is not None else self.tracker.last_frame
-        if img is not None:
-            small = cv2.cvtColor(cv2.resize(img, PREVIEW, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
-            self._photo = ImageTk.PhotoImage(Image.fromarray(small))
-            self.canvas.delete("all")
-            self.canvas.create_image(0, 0, anchor="nw", image=self._photo)
-            if self.sel:
-                self.canvas.create_rectangle(*self.sel, outline="red", width=2)
-        live = self.tracker.last_frame
-        items = [f"{t.name}  [{_(tracker.LEARN_ACTIONS.get(t.action, t.action))}]  "
-                 f"{(t.score(live) if live is not None else 0):.2f}"
-                 for t in self.learned.items]
-        if list(self.learn_list.get(0, "end")) != items:
-            cur = self.learn_list.curselection()
-            self.learn_list.delete(0, "end")
-            for it in items:
-                self.learn_list.insert("end", it)
-            for i in cur:
-                if i < len(items):
-                    self.learn_list.selection_set(i)
 
     # --- chiffres ----------------------------------------------------------------------
 
@@ -853,7 +775,6 @@ class App:
         self._refresh_history()
         self._refresh_deck()
         self._refresh_passwords()
-        self._refresh_learn()
         self._refresh_digits()
         self.root.after(200, self._tick)
 
