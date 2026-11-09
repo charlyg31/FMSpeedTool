@@ -58,6 +58,10 @@ class Tracker:
         self.last_frame = None
         self.framing = None               # vision.Framing pour une source console (PS2)
         self.framing_next = 0.0
+        self.audio = None                 # source du son du jeu (audio.LiveSource / FileSource) ou None
+        self.audio_clf = None             # audio.Classifier : fusion ou equipement au son
+        self.sound_pending = []           # [(instant, choix de l'image)] en attente du son
+        self.last_now = 0.0
         self.last_new_run = -1e9
         self.duel_ended_at = -1e9
         self.title_armed = None           # luminosite du titre quand NEW GAME etait surligne
@@ -94,6 +98,7 @@ class Tracker:
         self.facedown_until = 0.0         # pose face cachee a confirmer (zoom sur le terrain)
         self.reveal_until = 0.0           # flash vu : on attend la grande carte
         self.equip_until = 0.0
+        self.last_flash = -1e9
         self.reveal_watch = None          # (debut, carte) : fusion ou equipement a confirmer
         self.battle = None
         self.manual = {k: 0 for k in fmlogic.RANK_TABLE}
@@ -114,6 +119,9 @@ class Tracker:
 
     def process(self, frame, now=None, normalized=False):
         now = time.monotonic() if now is None else now
+        self.last_now = now
+        if self.sound_pending:
+            self._resolve_sounds(now)
         # Fenetre ePSXe de n'importe quelle taille : bandes noires retirees, puis 640x512.
         img = frame if normalized else vision.normalize(self.area.crop(frame))
         if img is None:
@@ -206,8 +214,11 @@ class Tracker:
         return fire
 
     def _title(self, img, matches, now):
-        """Depart : NEW GAME surligne sur l'ecran titre, puis l'ecran s'assombrit
-        (validation). Deplacer le curseur sur LOAD ne fait pas de fondu."""
+        """Depart a l'appui sur NEW GAME : NEW GAME est surligne, puis des l'image
+        suivante les boutons du menu (LOAD, 2P DUEL, TRADE, OPTION) quittent leur place
+        en glissant. Deplacer le curseur sur LOAD laisse les boutons en place (et
+        valider LOAD ne part pas de NEW GAME) : aucun reset. Secours : le fondu au noir
+        qui suit."""
         bright = float(img.mean())
         if "title_newgame" in matches:
             self.title_armed = bright
@@ -217,7 +228,9 @@ class Tracker:
             return
         if self.title_left_at is None:
             self.title_left_at = now
-        if bright < self.title_armed * 0.7:
+        # Boutons du menu partis (score ~0,2 contre 0,63 a 0,85 menu en place).
+        pressed = now - self.title_left_at <= 0.15 and vision.title_menu_score(img) < 0.4
+        if pressed or bright < self.title_armed * 0.7:
             self.title_armed = None
             self._new_run(now, "NEW GAME")
         elif now - self.title_left_at > FADE_WINDOW:
@@ -301,6 +314,7 @@ class Tracker:
             self._resolve_battle()
         if self.reveal_watch:
             self._count_reveal("fusion")
+        self._resolve_sounds(now, flush=True)
         s = self.rank_stats()
         total = fmlogic.score(s)
         summary = _("rang estime {band} ({score})", band=fmlogic.band(total), score=total)
@@ -348,11 +362,17 @@ class Tracker:
         if self._edge("magic_card", hud and vision.magic_card_shown(img), now):
             self.stats["magic"] += 1
             self.on_event("stat", _("Magie pure +1"))
-        if self._edge("equip_glow", vision.equip_glow(img) > 4000, now):
+        flash = vision.white_flash(img) > 3000
+        if flash:
+            self.last_flash = now
+        # Halo violet = equipement, sauf juste apres le flash d'une fusion : c'est alors
+        # l'illustration rose-violet de la carte revelee (Curse of Dragon...).
+        glow = vision.equip_glow(img) > 4000 and now - self.last_flash > 1.2 and not self.reveal_watch
+        if self._edge("equip_glow", glow, now):
             # Un equipement se termine par la grande carte du monstre equipe.
             self.reveal_until = 0.0
             self.equip_until = now + 2.5
-        if self._edge("flash", vision.white_flash(img) > 3000, now) and now > self.equip_until:
+        if self._edge("flash", flash, now) and now > self.equip_until:
             self.reveal_until = now + 2.5
         pending_equip = now <= self.equip_until
         if not pending_equip and now > self.reveal_until:
@@ -361,15 +381,43 @@ class Tracker:
             return
         self.equip_until = self.reveal_until = 0.0
         if pending_equip:
-            self._count_reveal("equip")
+            self._count_reveal("equip", source="glow")
         else:
             # Flash blanc : fusion, sauf si l'ATK de la carte se met a defiler.
             self.reveal_watch = (now, vision.reveal_card(img))
 
-    def _count_reveal(self, kind):
+    def _count_reveal(self, kind, source="flash"):
         self.reveal_watch = None
+        # Le son tranche apres un flash (fusion ou equipement dore). Un equipement reconnu a
+        # son halo violet est sur : le son ne le contredit pas.
+        if source == "flash" and self.audio is not None and self.audio_clf is not None:
+            # Le son tranche entre fusion et equipement : on attend d'avoir tout le bruitage.
+            self.sound_pending.append((self.last_now, kind))
+            return
+        self._add_stat(kind)
+
+    def _add_stat(self, kind, note=""):
         self.stats[kind] += 1
-        self.on_event("stat", _(fmlogic.STAT_LABELS[kind]) + " +1")
+        self.on_event("stat", _(fmlogic.STAT_LABELS[kind]) + " +1" + note)
+
+    def _resolve_sounds(self, now, flush=False):
+        """Decide chaque fusion/equipement en attente des que le son autour est disponible
+        (AFTER s apres la revelation). Son absent ou pas net : le choix de l'image reste."""
+        import audio as au
+        keep = []
+        for t, kind in self.sound_pending:
+            if not flush and now < t + au.AFTER + 0.05 and not now > t + 3.0:
+                keep.append((t, kind))
+                continue
+            heard = None
+            if self.audio.ready(t + au.AFTER):
+                heard = self.audio_clf.decide(self.audio.window(t - au.BEFORE, t + au.AFTER))
+            if heard and heard != kind:
+                self._add_stat(heard, " " + _("(au son ; l'image disait {kind})",
+                                              kind=_(fmlogic.STAT_LABELS[kind]).lower()))
+            else:
+                self._add_stat(kind)
+        self.sound_pending = keep
 
     def _battle(self, img, hud):
         """Combat : deux grandes cartes (attaquant a gauche). La carte detruite

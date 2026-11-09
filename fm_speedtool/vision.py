@@ -6,6 +6,7 @@ d'ePSXe redimensionnee), quelle que soit la taille de la fenetre.
 
 import json
 import os
+import sys
 
 import cv2
 import numpy as np
@@ -159,6 +160,24 @@ class Framing:
             self.score, self.locked = m[0], True
             return True
         return False
+
+
+_TITLE_REF = None
+
+
+def title_menu_score(img):
+    """Correlation des boutons LOAD / 2P DUEL / TRADE / OPTION de l'ecran titre avec
+    leur place normale : 0,63 a 0,85 menu en place, ~0,2 des que le menu s'en va
+    (appui sur NEW GAME)."""
+    global _TITLE_REF
+    if _TITLE_REF is None:
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        ref = cv2.imread(os.path.join(base, "assets", "title_ref.png"), cv2.IMREAD_GRAYSCALE)
+        _TITLE_REF = ref.astype(np.float32) if ref is not None else False
+    if _TITLE_REF is False:
+        return 1.0
+    gray = cv2.cvtColor(img[140:400, 230:410], cv2.COLOR_BGR2GRAY).astype(np.float32)
+    return float(cv2.matchTemplate(gray, _TITLE_REF, cv2.TM_CCOEFF_NORMED)[0, 0])
 
 
 def normalize(frame):

@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     "source": "epsxe",            # "epsxe" (fenetre ePSXe) ou "ps2" (carte d'acquisition)
     "ps2_window": "",             # titre de la fenetre qui affiche la PS2 (projecteur OBS...)
     "ps2_framing": None,          # [dy, sy] cadrage PS2 trouve (None : a chercher)
+    "use_audio": True,            # le son du jeu tranche entre fusion et equipement
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
@@ -114,6 +115,8 @@ class Worker(threading.Thread):
             except OSError:
                 frame = None
             self.window_ok = frame is not None
+            if self.app.tracker.audio is not None and frame is not None:
+                self.app.tracker.audio.follow(self.cap.hwnd)   # son du programme du jeu
             if frame is not None:
                 with self.lock:
                     self.app.tracker.process(frame)
@@ -162,6 +165,7 @@ class App:
             saved = self.cfg.get("ps2_framing")
             self.tracker.framing = vision.Framing(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
                                                   *(saved or (0.0, 1.0)), locked=bool(saved))
+        self._setup_audio()
         self.worker = Worker(self)
         self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None)
 
@@ -248,6 +252,9 @@ class App:
             v.trace_add("write", lambda *_a, k=key, var=v: self._set_option(k, var.get()))
             ttk.Checkbutton(opts, text=text, variable=v).pack(side="left", padx=4)
             self.opt_vars[key] = v
+        self.audio_var = tk.BooleanVar(value=self.cfg.get("use_audio", True))
+        self.audio_var.trace_add("write", lambda *_a: self._set_audio())
+        ttk.Checkbutton(opts, text=_("Son (fusion / equipement)"), variable=self.audio_var).pack(side="left", padx=4)
         # Langue : fichiers lang/<code>.json (voir i18n.py) ; change au redemarrage.
         self.langs = i18n.available()
         names = sorted(self.langs.values())
@@ -256,6 +263,26 @@ class App:
         lang_box.pack(side="left", padx=4)
         lang_box.bind("<<ComboboxSelected>>", lambda e: self._set_language())
         ttk.Label(opts, text="Langue / Language :").pack(side="left", padx=(24, 0), before=lang_box)
+
+    def _setup_audio(self):
+        """Le son du jeu (ePSXe seul) tranche entre fusion et equipement apres un flash."""
+        self.tracker.audio = self.tracker.audio_clf = None
+        if not self.cfg.get("use_audio", True):
+            return
+        try:
+            import audio
+            self.tracker.audio_clf = audio.Classifier(os.path.join(BASE_DIR, "assets", "audio_templates.npz"))
+            self.tracker.audio = audio.LiveSource()
+        except Exception:
+            self.tracker.audio = self.tracker.audio_clf = None
+
+    def _set_audio(self):
+        self.cfg["use_audio"] = self.audio_var.get()
+        self._save_config()
+        with self.worker.lock:
+            if self.tracker.audio is not None and self.tracker.audio.capture is not None:
+                self.tracker.audio.capture.stop.set()
+            self._setup_audio()
 
     def _set_source(self):
         src = self.source.get()
@@ -813,8 +840,12 @@ class App:
         if self.tracker.framing is not None:
             fr = self.tracker.framing
             src = "PS2" + ("" if fr.locked else " " + _("(cadrage en attente d'un duel)"))
+        snd = {"OK": _("son OK"), "silence": _("pas de son du jeu"), "indisponible": _("son indisponible"),
+               "en attente du jeu": _("son en attente")}
+        sound = (snd.get(self.tracker.audio.status, self.tracker.audio.status)
+                 if self.tracker.audio is not None else _("son coupe"))
         self.status.set(_("{source} : {win} ({fps} img/s)     LiveSplit : {ls}", source=src, win=win,
-                          fps=f"{self.worker.fps:.0f}", ls=ls) + "\n"
+                          fps=f"{self.worker.fps:.0f}", ls=ls) + f"     {sound}\n"
                         + _("Tour : {turn}     LP  COM {com_lp} / YOU {you_lp}     Cartes  COM {com_deck} / YOU {you_deck}",
                             turn=tr.active or "-", com_lp=val(hud["com_lp"]), you_lp=val(hud["you_lp"]),
                             com_deck=val(hud["com_deck"]), you_deck=val(hud["you_deck"])))

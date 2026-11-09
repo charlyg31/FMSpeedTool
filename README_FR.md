@@ -37,7 +37,7 @@ que le jeu, sans incrustation par-dessus.
 
 | Fonction | Signal à l'image |
 |---|---|
-| Reset + départ | NEW GAME surligné sur l'écran titre, puis fondu au noir (validation) |
+| Reset + départ | Appui sur NEW GAME : les boutons du menu s'écartent dès l'image suivante (fondu au noir en secours). Déplacer le curseur ou valider LOAD ne démarre et ne reset jamais rien |
 | Split victoire (campagne) | YOU WIN! / WINNER — YOU, puis split à l'apparition de RESULTS OF DUEL |
 | Split 1re défaite (Heishin 1) | YOU LOSE / WINNER — COM |
 | Free Duel | Écran « FREE DUEL / SELECT OPPONENT » : aucun split par duel |
@@ -51,7 +51,7 @@ que le jeu, sans incrustation par-dessus.
 |---|---|
 | Tours | Le panneau YOU s'allume |
 | Cartes utilisées / LP restants | Chiffres du HUD (0 à 9, appris sur la vidéo de run) |
-| Fusions / Équipements | Flash blanc puis grande carte : illustration identique à la précédente = équipement, sinon fusion |
+| Fusions / Équipements | Flash puis grande carte ; le son du jeu tranche fusion ou équipement (voir plus bas) ; sans son : ATK/DFD qui défile ou halo violet = équipement, sinon fusion |
 | Magie pure | Grande carte magie (cadre vert) jouée à ton tour (terrains compris) |
 | Piège déclenché | Au tour du COM, la carte de droite du combat est un piège (cadre magenta) |
 | Attaques efficaces | À ton tour, le monstre adverse en attaque (ATK en noir) est détruit |
@@ -72,6 +72,17 @@ lisible (34/34, dont les 5 duels A-TEC contre Pegasus).
 `tools/extract_video.py` extrait les images du jeu et la ligne surlignée de LiveSplit (tes vrais splits).
 `tools/replay_video.py` rejoue la run dans le moteur. `tools/rank_check.py` compare le rang estimé
 au rang affiché par le jeu.
+
+## Son du jeu (fusion / équipement)
+
+Chaque action a son bruitage : la fusion fait un souffle large puis une note grave tenue,
+l'équipement finit par une montée de fréquence très nette. L'image voit qu'il se passe quelque
+chose (flash, grande carte) ; le son tranche entre fusion et équipement. Seul le son du programme du
+jeu est capté (ePSXe, ou le programme de la fenêtre PS2) : ni Discord, ni la musique, ni le micro.
+Le son du jeu doit être activé dans ePSXe (il peut être coupé dans le casque). La case « Son
+(fusion / équipement) » le désactive ; la ligne d'état affiche « son OK ». Sans son, ou si le son
+n'est pas net, l'image décide comme avant. Testé sur trois vidéos de run (ePSXe, un stream Twitch
+avec voix et musique, une run PS2) : il corrige les cas où l'image seule se trompait.
 
 ## Lecture du deck
 

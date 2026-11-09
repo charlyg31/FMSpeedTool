@@ -37,6 +37,11 @@ def main(folder, start=0, end=10 ** 9):
             print("        stats:", tr.rank_stats())
 
     tr = tracker.Tracker(digits, builtin, learned, on_event)
+    if os.environ.get("FM_AUDIO"):
+        # Son de la video (WAV mono 22,05 kHz) : decide fusion / equipement.
+        import audio
+        tr.audio = audio.FileSource(os.environ["FM_AUDIO"])
+        tr.audio_clf = audio.Classifier(os.path.join(ROOT, "fm_speedtool", "assets", "audio_templates.npz"))
     if os.environ.get("FM_PS2"):
         # Mode PS2 : chiffres PS2 livres + calage automatique du cadrage.
         tr.framing = vision.Framing(os.path.join(ROOT, "fm_speedtool", "assets", "hud_ref.png"))

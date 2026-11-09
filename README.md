@@ -41,7 +41,7 @@ overlay on top.
 
 | Feature | Image signal |
 |---|---|
-| Reset + start | NEW GAME highlighted on the title screen, then fade to black (confirmation) |
+| Reset + start | Pressing NEW GAME: the menu buttons slide away on the very next frame (fade to black as a backup). Moving the cursor or pressing LOAD never starts or resets |
 | Win split (campaign) | YOU WIN! / WINNER — YOU, split when RESULTS OF DUEL appears |
 | First loss split (Heishin 1) | YOU LOSE / WINNER — COM |
 | Free Duel | "FREE DUEL / SELECT OPPONENT" screen: no split for those duels |
@@ -55,7 +55,7 @@ overlay on top.
 |---|---|
 | Turns | The YOU panel lights up |
 | Cards used / remaining LP | HUD digits |
-| Fusions / Equips | White flash then big card: same art as before = equip, otherwise fusion |
+| Fusions / Equips | Flash then big card; the game sound decides fusion or equip (see below); without sound: ATK/DEF counting up or purple glow = equip, otherwise fusion |
 | Pure magic | Big magic card (green frame) played on your turn (fields included) |
 | Trap triggered | On the COM turn, the right card of the battle is a trap (magenta frame) |
 | Effective attacks | On your turn, the opponent monster in attack position is destroyed |
@@ -68,6 +68,17 @@ final rank of every duel of the run (campaign and Free Duel).
 
 Checked on a full run video: the estimated rank matches the rank shown by the game on all 34 duels
 with a readable rank badge (34/34, including the 5 A-TEC duels against Pegasus).
+
+## Game sound (fusion / equip)
+
+Each action has its own sound: a fusion is a wide whoosh then a held low note, an equip ends with a
+sharp rising sweep. The image sees that something happens (flash, big card); the sound decides
+fusion or equip. Only the sound of the game program is captured (ePSXe, or the PS2 window's
+program), not Discord, music or the microphone; the game sound must be on in ePSXe (it can be muted
+in your headset). "Sound (fusion / equip)" turns it off; the status line shows "sound OK". Without
+sound, or when the sound is not clear, the image decides as before. Tested on three run videos
+(ePSXe, a Twitch stream with voice and music, a PS2 run): it fixes the cases where the image alone
+was wrong.
 
 ## Deck reading
 
