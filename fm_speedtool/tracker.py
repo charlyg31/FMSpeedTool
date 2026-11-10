@@ -25,6 +25,7 @@ GLOW_WITH_FLASH = 0.12   # halo d'equipement : commence avec son propre flash bl
 REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defile = equipement)
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
+PLACE_CANCEL = 1.0       # choix de la case annule : l'ecran d'orientation revient dans ce delai (~0,3 s)
 # Types de split (transmis au script LiveSplit, qui filtre selon ses reglages)
 SPLIT_WIN, SPLIT_FIRST_LOSS, SPLIT_FARM, SPLIT_OTHER = 1, 2, 3, 4
 
@@ -89,6 +90,8 @@ class Tracker:
         self.orient_back_at = None    # dernier dos de carte vu sur l'ecran d'orientation
         self.orient_last_at = 0.0
         self.facedown_until = 0.0         # pose face cachee a confirmer (zoom sur le terrain)
+        self.facedown_zoom = False        # vue rapprochee (choix de la case) en cours
+        self.facedown_confirm_at = None   # fin de la vue rapprochee : compte si pas d'annulation
         self.reveal_until = 0.0           # flash vu : on attend la grande carte
         self.equip_until = 0.0
         self.last_flash = -1e9
@@ -537,11 +540,26 @@ class Tracker:
             self.orient_seen = False
             if self.orient_back_at is not None and self.orient_last_at - self.orient_back_at <= ORIENT_END_WINDOW:
                 self.facedown_until = now + PLACE_CONFIRM
-        # Pose validee : la camera zoome sur le terrain (des l'image de sortie, a 4 img/s).
+        # Orientation validee : la camera zoome sur le terrain pour choisir la case
+        # (des l'image de sortie, a 4 img/s).
         if self.facedown_until:
             if now > self.facedown_until or arrows:
                 self.facedown_until = 0.0
             elif vision.board_zoom(img):
                 self.facedown_until = 0.0
+                self.facedown_zoom = True
+        # Case choisie : la vue rapprochee se termine sur le terrain. Annulee (rond) :
+        # l'ecran d'orientation revient juste apres, la carte n'est pas posee.
+        if self.facedown_zoom:
+            if arrows:
+                self.facedown_zoom = False
+                self.facedown_confirm_at = None
+            elif vision.board_zoom(img):
+                self.facedown_confirm_at = None
+            elif self.facedown_confirm_at is None:
+                self.facedown_confirm_at = now + PLACE_CANCEL
+            elif now >= self.facedown_confirm_at:
+                self.facedown_zoom = False
+                self.facedown_confirm_at = None
                 self.stats["facedown"] += 1
                 self.on_event("stat", _("Pose face cachee +1"))

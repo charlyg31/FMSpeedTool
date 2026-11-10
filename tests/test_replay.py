@@ -40,6 +40,8 @@ def test_run_sequence():
     t = 0.0
     seq = ["title1", "ng2", "ng3", "boot_screen", "st1", "st1", "st1", "d1", "d1", "d2",
            "d6", "d6", "e1"]
+    # Pose comptee 1 s apres la vue rapprochee, si l'ecran d'orientation ne revient pas.
+    seq += ["e1"] * 6
     for name in seq:
         tr.process(load(name), now=t)
         t += 0.2
