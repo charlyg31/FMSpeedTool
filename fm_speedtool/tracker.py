@@ -391,7 +391,11 @@ class Tracker:
                 self.on_event("info", _("Victoire{who} - {summary}", who=who, summary=summary))
                 self.pending_split = (_("Split : victoire{who}", who=who), now + 10, SPLIT_WIN, self.opponent)
         elif result == "loss":
-            self.losses += 1
+            # Seule la 1re defaite de campagne (Heishin 1) compte : une defaite en Free
+            # Duel ne la decale pas, et les suivantes (mort puis rechargement) ne
+            # splittent pas.
+            if not free:
+                self.losses += 1
             self.on_event("info", _("Defaite{who}", who=who))
             if self.options["split_first_loss"] and self.losses == 1 and not free:
                 self.pending_split = (_("Split : premiere defaite (Heishin 1)"), now + 10,
