@@ -324,13 +324,22 @@ class DigitReader:
         if not n:
             return None, 1e9
         if getattr(self, "_cache_n", -1) != n:
-            self._labels = [d for d, vs in self.templates.items() for _ in vs]
+            self._labels = np.array([d for d, vs in self.templates.items() for _ in vs])
             self._stack = np.stack([v for vs in self.templates.values() for v in vs])
             self._cache_n = n
         dist = np.abs(self._stack - vec).mean(axis=(1, 2))
         i = int(np.argmin(dist))
-        best_d = float(dist[i])
-        return (self._labels[i], best_d) if best_d < 0.10 else (None, best_d)
+        best_d, label = float(dist[i]), str(self._labels[i])
+        if best_d < 0.10:
+            return label, best_d
+        # Un peu plus loin (autre eclairage du panneau, image plus floue) : accepte
+        # si aucun autre chiffre n'est proche. Pas pour le "1" : toute barre fine
+        # (bord du panneau qui glisse) lui ressemble.
+        other = dist[self._labels != label]
+        second = float(other.min()) if other.size else 1e9
+        if best_d < 0.18 and second > best_d * 1.5 and label != "1":
+            return label, best_d
+        return None, best_d
 
     def read(self, img, field):
         """Valeur entiere, ou None si un chiffre est inconnu/illisible."""

@@ -14,7 +14,8 @@ from i18n import N_, _
 STAT_ACTIONS = ("fusion", "equip", "magic", "trap", "eff_atk", "def_win", "facedown")
 
 HUD_ON_FRAMES = 3        # images consecutives pour valider l'apparition du HUD
-DUEL_GONE_SECONDS = 8.0  # HUD absent aussi longtemps sans resultat = duel abandonne
+DUEL_GONE_SECONDS = 8.0  # HUD absent aussi longtemps, resultat connu : fin du duel
+RESULT_WAIT = 30.0       # resultat inconnu : attente de RESULTS OF DUEL (WINNER) avant d'abandonner
 EDGE_COOLDOWN = 1.5      # anti-rebond des gabarits
 FADE_WINDOW = 0.8        # NEW GAME valide : l'ecran titre s'assombrit dans ce delai
 NAME_ENTRY_GRACE = 30.0  # l'ecran du nom ne relance pas une run deja demarree
@@ -136,6 +137,7 @@ class Tracker:
                 matches.setdefault(t.action, t)
                 if t.action == "opponent":
                     matches["opponent"] = t
+        hud_now = vision.hud_present(img)
         self._title(img, matches, now)
         if self._edge("name_entry", "new_run" in matches, now) and now - self.last_new_run > NAME_ENTRY_GRACE:
             self._new_run(now, _("ecran du nom"))
@@ -160,6 +162,8 @@ class Tracker:
         if self._edge("save_done", "save_done" in matches, now):
             self._save()
         if self._edge("load_done", "load_done" in matches, now):
+            if self.in_duel and not hud_now:
+                self._end_duel(self.decided, now)   # duel quitte sans attendre RESULTS
             self._load()
 
         self.on_password_screen = "password_screen" in matches
@@ -170,7 +174,7 @@ class Tracker:
                 self.on_event("deck", (_("Deck : ajout de {name}", name=name) if kind == "+"
                                         else _("Deck : retrait de {name}", name=name)))
 
-        hud = vision.hud_present(img)
+        hud = hud_now
         if hud:
             self._hud_frame(img, now)
         if self.in_duel:
@@ -183,7 +187,10 @@ class Tracker:
                 self._end_duel("loss", now)
             elif "results" in matches:
                 self._end_duel(self.decided, now)
-            elif now - self.hud_last_seen > DUEL_GONE_SECONDS:
+            elif now - self.hud_last_seen > (DUEL_GONE_SECONDS if self.decided else RESULT_WAIT):
+                # Coup fatal : le panneau des LP quitte l'ecran pendant que le compteur
+                # descend, le 0 n'est jamais affiche. Le resultat vient alors de
+                # RESULTS OF DUEL (WINNER YOU/COM), ~12 s apres.
                 self._end_duel(self.decided, now)
         # Le split part a l'apparition de l'ecran RESULTS OF DUEL (comme a la main).
         if self.pending_split and ("results" in matches or now > self.pending_split[1]):
@@ -287,6 +294,11 @@ class Tracker:
         self.on_event("new_run", _("Nouvelle partie ({why})", why=why))
 
     def _hud_frame(self, img, now):
+        if self.in_duel and now - self.hud_last_seen > DUEL_GONE_SECONDS:
+            # Duel en attente de son resultat, mais un nouveau duel commence (sauvegarde
+            # rechargee, reset) : on ferme l'ancien.
+            self._end_duel(self.decided, now)
+            self.hud_frames = 0
         self.hud_last_seen = now
         self.hud_frames += 1
         if not self.in_duel:
