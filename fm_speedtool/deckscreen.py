@@ -18,6 +18,7 @@ CELL_W, CELL_H = 13, 16
 DECK_POS_X = (34, 50)
 DECK_ID_X = (74, 90, 106)
 DECK_COUNT_CELLS = ((522, 51), (538, 51))
+CHEST_COUNT_CELLS = ((572, 42), (588, 42))   # cartes dans le deck, en haut a droite du coffre
 CHEST_ID_X = (10, 26, 42)
 BOX_DY, BOX_IN_CHEST_X, BOX_IN_DECK_X, BOX_W = 16, 558, 596, 14
 GLYPH = (8, 12)
@@ -136,6 +137,10 @@ def deck_count(img, digits):
     return digits.read(img, DECK_COUNT_CELLS)
 
 
+def chest_count(img, digits):
+    return digits.read(img, CHEST_COUNT_CELLS)
+
+
 def _edge_highlight(img, test, minimum):
     scores = []
     for r in range(ROWS):
@@ -198,6 +203,10 @@ class DeckWatcher:
         self.tick = 0
         self._prev = None
         self._deck_hl_card = None
+        self._chest_hl_card = None
+        self._chest_rows = {}     # lignes du coffre de la derniere lecture stable
+        self._chest_low = 0       # lectures stables d'un compteur plus bas (impossible dans le coffre)
+        self._chest_count_seen = False   # compteur du coffre deja lu sur cette source
 
     def reset(self):
         self.__init__()
@@ -281,23 +290,68 @@ class DeckWatcher:
         self._check_complete()
         return events
 
-    def chest_frame(self, img, digits, box_digits):
-        """Coffre : seuls les AJOUTS comptent. Si la case "dans le deck" d'une carte
-        augmente par rapport a ce qu'on sait, ce sont des ajouts. Une case plus basse
-        n'enleve rien (retraits : ecran DECK uniquement)."""
+    def chest_frame(self, img, digits, box_digits, count_digits=None):
+        """Coffre : seuls les AJOUTS comptent (retraits : ecran DECK uniquement).
+        Le compteur du deck (en haut a droite) monte de 1 : la carte sous le curseur
+        est ajoutee. Elle est lue juste avant, tant que sa ligne est claire : une carte
+        dont le dernier exemplaire part dans le deck est grisee, et ses chiffres pales
+        se lisent mal (332 -> 333, 203 -> 303, 160 -> 150 sur une video de stream).
+        Compteur illisible : repli sur la case "dans le deck" de chaque ligne."""
         rows = chest_rows(img, digits, box_digits)
         hl = chest_highlight(img)
-        if not self._stable("chest", (tuple(sorted(rows.items())), hl)):
+        count = chest_count(img, count_digits) if count_digits is not None else None
+        if not self._stable("chest", (tuple(sorted(rows.items())), hl, count)):
             return []
         events = []
-        for cid, _, in_deck in rows.values():
-            if in_deck is None:
-                continue
-            if (self.complete or cid in self.known) and in_deck > self.deck[cid]:
-                events += self._apply("+", cid, in_deck - self.deck[cid])
-                self.slots = {}   # position inconnue : la liste devra etre relue
+        if count is not None and 1 <= count <= DECK_SIZE:
+            self._chest_count_seen = True
+            if self.count is not None and count > self.count:
+                cid = self._added_card(rows, hl)
+                if cid is not None:
+                    events += self._apply("+", cid, count - self.count)
+                    self.slots = {}   # position inconnue : la liste devra etre relue
+            # Le compteur ne baisse pas dans le coffre : une baisse isolee est une
+            # mauvaise lecture (sinon un ajout serait compte deux fois).
+            if self.count is None or count >= self.count:
+                self.count, self._chest_low = count, 0
+            else:
+                self._chest_low += 1
+                if self._chest_low >= 10:
+                    self.count, self._chest_low = count, 0
+        elif not self._chest_count_seen:
+            # Compteur jamais lu (autre source) : repli sur les cases. Compteur deja lu
+            # mais pas sur cette image (clignotement, defilement) : on attend la suivante.
+            for cid, _, in_deck in rows.values():
+                if in_deck is None:
+                    continue
+                if (self.complete or cid in self.known) and in_deck > self.deck[cid]:
+                    events += self._apply("+", cid, in_deck - self.deck[cid])
+                    self.slots = {}
+        if hl is not None and hl in rows:
+            cid, in_chest, _ = rows[hl]
+            # Seule une ligne claire (au moins un exemplaire dans le coffre) peut etre ajoutee.
+            self._chest_hl_card = cid if in_chest != 0 else None
+        for cid, _, _ in rows.values():
             self._seen(cid)
+        self._chest_rows = rows
         return events
+
+    def _added_card(self, rows, hl):
+        """Carte qui vient de passer du coffre au deck, avec son numero lu a la lecture
+        d'avant (ligne encore claire) :
+        1) la ligne dont les cases ont change (moins dans le coffre ou plus dans le deck) ;
+        2) sinon la ligne du curseur (il a pu descendre juste avant l'ajout) ;
+        3) sinon la derniere carte vue sous le curseur (curseur qui clignote)."""
+        prev = self._chest_rows
+        changed = [i for i, (cid, in_chest, in_deck) in rows.items()
+                   if i in prev and prev[i][1] != 0
+                   and ((in_chest is not None and prev[i][1] is not None and in_chest < prev[i][1])
+                        or (in_deck is not None and prev[i][2] is not None and in_deck > prev[i][2]))]
+        if len(changed) == 1:
+            return prev[changed[0]][0]
+        if hl is not None and hl in prev and prev[hl][1] != 0:
+            return prev[hl][0]
+        return self._chest_hl_card
 
     def other_frame(self):
         self._prev = None
@@ -342,7 +396,7 @@ class DeckReader:
             events = self.watcher.deck_frame(img, self.deck_digits, self.count_digits)
         elif screen == "chest":
             # Coffre : seuls les ajouts de cartes comptent (les retraits se voient sur l'ecran DECK).
-            events = self.watcher.chest_frame(img, self.chest_digits, self.box_digits)
+            events = self.watcher.chest_frame(img, self.chest_digits, self.box_digits, self.count_digits)
         else:
             self.watcher.other_frame()
             events = []
