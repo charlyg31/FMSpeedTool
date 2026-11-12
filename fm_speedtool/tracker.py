@@ -24,6 +24,7 @@ FLASH_GAP = 0.3          # images blanches plus espacees : nouveau flash (video 
 GLOW_WITH_FLASH = 0.12   # halo d'equipement : commence avec son propre flash blanc
 REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defile = equipement)
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
+FACE_UP_BACK = 0.45      # score du dos de carte sous lequel la carte est face visible (0,25-0,31)
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
 PLACE_CANCEL = 1.0       # choix de la case annule : l'ecran d'orientation revient dans ce delai (~0,3 s)
 # Types de split (transmis au script LiveSplit, qui filtre selon ses reglages)
@@ -89,6 +90,7 @@ class Tracker:
         self.orient_seen = False
         self.orient_back_at = None    # dernier dos de carte vu sur l'ecran d'orientation
         self.orient_last_at = 0.0
+        self.orient_face_up_at = None # carte vue face visible apres le dernier dos
         self.facedown_until = 0.0         # pose face cachee a confirmer (zoom sur le terrain)
         self.facedown_zoom = False        # vue rapprochee (choix de la case) en cours
         self.facedown_confirm_at = None   # fin de la vue rapprochee : compte si pas d'annulation
@@ -532,13 +534,21 @@ class Tracker:
         if arrows:
             if not self.orient_seen:
                 self.orient_back_at = None
+                self.orient_face_up_at = None
             self.orient_seen = True
             self.orient_last_at = now
-            if vision.card_back(img) >= 0.75:
+            back = vision.card_back(img)
+            if back >= 0.75:
                 self.orient_back_at = now
+                self.orient_face_up_at = None
+            elif back < FACE_UP_BACK and self.orient_back_at is not None:
+                # Retournee face visible apres le dos (le dos peut ne durer que 0,1 s si
+                # le joueur appuie vite) : ce n'est plus une pose face cachee.
+                self.orient_face_up_at = now
         elif self.orient_seen:
             self.orient_seen = False
-            if self.orient_back_at is not None and self.orient_last_at - self.orient_back_at <= ORIENT_END_WINDOW:
+            if (self.orient_back_at is not None and self.orient_face_up_at is None
+                    and self.orient_last_at - self.orient_back_at <= ORIENT_END_WINDOW):
                 self.facedown_until = now + PLACE_CONFIRM
         # Orientation validee : la camera zoome sur le terrain pour choisir la case
         # (des l'image de sortie, a 4 img/s).
