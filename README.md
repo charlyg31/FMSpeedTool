@@ -32,8 +32,7 @@ overlay on top.
   sets the vertical offset of your capture setup by itself ("PS2 framing found" in the log), so it
   is ready before the first deck check. It is kept;
   "Recalibrate" searches again (after changing a setting).
-- **Digits**: the PS2 video output draws the digits slightly differently. PS2 digits are built in;
-  any missing one shows up in "Digits to name".
+- **Digits**: the PS2 video output draws the digits slightly differently. PS2 digits are built in.
 - Tested on A3r1uS's PS2 run (YouTube video): run followed from start to end, framing found on the
   first duel, 60 fps live, exact rank on 18/27 duels (the others one letter off).
 

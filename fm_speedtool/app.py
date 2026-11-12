@@ -11,9 +11,6 @@ import tkinter as tk
 import webbrowser
 from tkinter import messagebox, ttk
 
-import cv2
-from PIL import Image, ImageTk
-
 import capture
 import deckscreen
 import f6calc
@@ -188,14 +185,13 @@ class App:
         page.columnconfigure(1, weight=2)
         page.columnconfigure(2, weight=3)
         page.rowconfigure(1, weight=1)
-        page.rowconfigure(2, weight=0)   # options + chiffres : compacts
+        page.rowconfigure(2, weight=0)   # options : compactes
 
         self._build_status(page)
         self._build_rank(self._box(page, _("Duel en cours - rang"), 1, 0))
         self._build_f6(self._box(page, "Final 6", 1, 1))
         self._build_log(self._box(page, _("Historique des duels"), 1, 2))
-        self._build_options(self._box(page, _("Options"), 2, 0, colspan=2))
-        self._build_digits(self._box(page, _("Chiffres a nommer"), 2, 2))
+        self._build_options(self._box(page, _("Options"), 2, 0, colspan=3))
         self._build_passwords()
 
         self.worker.start()
@@ -694,56 +690,6 @@ class App:
             self.pw_view.pack_forget()
             self.page.pack(fill="both", expand=True)
 
-    # --- chiffres ----------------------------------------------------------------------
-
-    def _build_digits(self, box):
-        self.digits_info = tk.StringVar()
-        ttk.Label(box, textvariable=self.digits_info, wraplength=380, justify="left").pack(anchor="w")
-        self.unknown_frame = ttk.Frame(box)
-        self.unknown_frame.pack(fill="both", expand=True)
-        ttk.Button(box, text=_("Oublier les chiffres appris"), command=self._forget_digits).pack(anchor="w")
-        self._unknown_shown = -1
-
-    def _forget_digits(self):
-        with self.worker.lock:
-            if os.path.exists(self.digits.path):
-                os.remove(self.digits.path)
-            self.digits.templates = {}
-            self.digits.unknown = []
-            self.digits.load()  # repart des chiffres integres
-        self._unknown_shown = -1
-
-    def _refresh_digits(self):
-        n = len(self.digits.unknown)
-        self.digits_info.set(_("Aucun chiffre inconnu.") if not n else
-                             _("{n} chiffre(s) inconnu(s) : tape la valeur puis OK.", n=n))
-        if n == self._unknown_shown:
-            return
-        self._unknown_shown = n
-        for w in self.unknown_frame.winfo_children():
-            w.destroy()
-        self._glyph_photos = []
-        for i, (vec, preview) in enumerate(list(self.digits.unknown)[:10]):
-            cell = ttk.Frame(self.unknown_frame, padding=2)
-            cell.grid(row=i // 5, column=i % 5)
-            ph = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)))
-            self._glyph_photos.append(ph)
-            ttk.Label(cell, image=ph).pack()
-            var = tk.StringVar()
-            ttk.Entry(cell, textvariable=var, width=3).pack()
-            ttk.Button(cell, text="OK", width=3,
-                       command=lambda v=vec, var=var: self._label_digit(v, var)).pack()
-
-    def _label_digit(self, vec, var):
-        d = var.get().strip()
-        if len(d) != 1 or not d.isdigit():
-            return
-        with self.worker.lock:
-            self.digits.add(d, vec)
-            self.digits.save()
-            self.digits.unknown = [(v, p) for v, p in self.digits.unknown if v is not vec]
-        self._unknown_shown = -1
-
     # --- boucle UI --------------------------------------------------------------------
 
     def _tick(self):
@@ -779,7 +725,6 @@ class App:
         self._refresh_history()
         self._refresh_deck()
         self._refresh_passwords()
-        self._refresh_digits()
         self.root.after(200, self._tick)
 
     def _save_config(self):

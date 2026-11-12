@@ -29,7 +29,7 @@ que le jeu, sans incrustation par-dessus.
   le logiciel cale tout seul le décalage vertical propre à ta carte d'acquisition (« Cadrage PS2
   trouvé » dans le journal) : il est donc prêt avant le premier check du deck. Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
 - **Chiffres** : la sortie vidéo de la PS2 rend les chiffres un peu différemment. Des chiffres PS2
-  sont intégrés ; s'il en manque, ils apparaissent dans « Chiffres à nommer ».
+  sont intégrés.
 - Testé sur la run PS2 d'A3r1uS (vidéo YouTube) : run suivie du début à la fin, cadrage trouvé
   dès le premier duel, 60 img/s en direct, rang exact sur 18/27 duels (les autres à une lettre près).
 
