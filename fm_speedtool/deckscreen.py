@@ -8,6 +8,7 @@ Ecran CHEST : 8 lignes "numero de carte" + deux cases a droite : exemplaires
 
 import json
 import os
+import threading
 from collections import Counter
 
 import cv2
@@ -90,7 +91,8 @@ class Digits:
     def __init__(self, path, glyph_fn):
         self.glyph_fn = glyph_fn
         self._stack = None
-        self._img = self._gmin = None
+        self._cache = None
+        self._tls = threading.local()
         self.vecs, self.labels = [], []
         if os.path.exists(path):
             data = np.load(path)
@@ -99,10 +101,11 @@ class Digits:
 
     def _min_img(self, img):
         """Minimum des 3 couleurs de toute l'image, calcule une fois par image."""
-        if self._img is not img:
+        cache = self._cache       # (image, minimum) : echange d'un bloc, sur entre fils
+        if cache is None or cache[0] is not img:
             b, g, r = cv2.split(img)
-            self._img, self._gmin = img, cv2.min(cv2.min(b, g), r)
-        return self._gmin
+            cache = self._cache = (img, cv2.min(cv2.min(b, g), r))
+        return cache[1]
 
     def _at(self, img, x, y, w, h, fn):
         """Case (x, y) de l'image : distance au gabarit le plus proche."""
@@ -119,9 +122,11 @@ class Digits:
             return None, 9.0
         if self._stack is None:
             self._stack = np.ascontiguousarray(np.stack(self.vecs).reshape(len(self.vecs), -1))
-            self._buf = np.empty_like(self._stack)
-        # Distance moyenne a tous les gabarits d'un coup (tampon reutilise).
-        d = np.abs(np.subtract(self._stack, vec.reshape(-1), out=self._buf), out=self._buf).sum(axis=1)
+        # Distance moyenne a tous les gabarits d'un coup (tampon propre a chaque fil).
+        buf = getattr(self._tls, "buf", None)
+        if buf is None:
+            buf = self._tls.buf = np.empty_like(self._stack)
+        d = np.abs(np.subtract(self._stack, vec.reshape(-1), out=buf), out=buf).sum(axis=1)
         d /= self._stack.shape[1]
         i = int(np.argmin(d))
         return self.labels[i], float(d[i])
