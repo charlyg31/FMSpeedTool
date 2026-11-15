@@ -10,12 +10,13 @@ Outil de speedrun pour Yu-Gi-Oh! Forbidden Memories (US, 15 Card Mod) sur ePSXe.
 - **Toutes les tailles de fenêtre ePSXe fonctionnent** (testé de 640×480 à 1280×1024, et 640×480 à
   2560×1920 sur images) : l'image est ramenée en 640×512. Si ePSXe garde les proportions, les
   bandes noires autour du jeu sont détectées et retirées automatiquement.
-- **Cadrage sur l'écran du deck** : si ton réglage d'ePSXe décale, étire ou zoome un peu l'image
-  (résolution, recadrage, plugin vidéo), les chiffres du deck ne tombent plus à leur place. À la
-  première ouverture du deck, le logiciel repère le mot ORDER, le mot DECK et le bas de la liste et
-  corrige l'image tout seul (« Cadrage trouvé » dans le journal). Le réglage est gardé et surveillé :
-  s'il change, le cadrage suit. Tant qu'il n'est pas fait, la ligne d'état affiche « cadrage : ouvre
-  le deck ». « Recaler » le cherche à nouveau.
+- **Cadrage automatique** : si ton réglage d'ePSXe décale, étire ou zoome un peu l'image
+  (résolution, recadrage, plugin vidéo), les chiffres du deck ne tombent plus à leur place. Dès
+  l'écran titre (NEW GAME / LOAD...), ou le menu du jeu (CAMPAIGN / BUILD DECK...), le logiciel
+  repère le logo, le copyright et les hiéroglyphes et corrige l'image tout seul (« Cadrage trouvé »
+  dans le journal) ; l'écran du deck sert aussi de repère (mots ORDER et DECK, bas de la liste). Le
+  réglage est gardé et surveillé : s'il change, le cadrage suit. Tant qu'il n'est pas fait, la ligne
+  d'état affiche « cadrage : écran titre ou deck ». « Recaler » le cherche à nouveau.
 - **LiveSplit, avec le script (recommandé)** : copie `FMSpeedTool.asl` (fourni avec le .exe) dans le
   dossier de LiveSplit, puis clic droit > Edit Layout… > (+) > Control > **Scriptable Auto Splitter** >
   Script Path : `FMSpeedTool.asl`. Coche Start / Split / Reset et, dans les réglages du script, les
@@ -32,9 +33,8 @@ qui affiche le jeu : par exemple un projecteur OBS de la source de la carte d'ac
 (clic droit sur la source > Projecteur fenêtré). Cette fenêtre doit rester visible et ne montrer
 que le jeu, sans incrustation par-dessus.
 - **Cadrage automatique** : sur le menu de l'écran titre (NEW GAME / LOAD...) ou au premier duel,
-  le logiciel cale tout seul le décalage vertical propre à ta carte d'acquisition, puis à
-  l'ouverture du deck le cadrage complet (largeur et hauteur), comme pour ePSXe (« Cadrage trouvé »
-  dans le journal). Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
+  le logiciel cale tout seul le cadrage complet (largeur et hauteur) propre à ta carte
+  d'acquisition, comme pour ePSXe (« Cadrage trouvé » dans le journal). Il est gardé ensuite ; « Recaler » le cherche à nouveau (après un changement de réglage).
 - **Chiffres** : la sortie vidéo de la PS2 rend les chiffres un peu différemment. Des chiffres PS2
   sont intégrés.
 - Testé sur la run PS2 d'A3r1uS (vidéo YouTube) : run suivie du début à la fin, cadrage trouvé

@@ -347,7 +347,7 @@ class App:
             self.tracker.deck_wait = None
         self.cfg[self.framing_key] = None
         self._save_config()
-        self._log(_("Cadrage : recherche en cours (ouvre l'ecran du deck)"))
+        self._log(_("Cadrage : recherche en cours (affiche l'ecran titre ou le deck)"))
 
     def _set_language(self):
         code = next((c for c, n in self.langs.items() if n == self.lang_var.get()), None)
@@ -715,7 +715,7 @@ class App:
         fr = self.tracker.framing
         src = "PS2" if self.cfg.get("source") == "ps2" else "ePSXe"
         if fr is not None and not fr.full:
-            src += " " + _("(cadrage : ouvre le deck)")
+            src += " " + _("(cadrage : ecran titre ou deck)")
         snd = {"OK": _("son OK"), "silence": _("pas de son du jeu"), "indisponible": _("son indisponible"),
                "en attente du jeu": _("son en attente")}
         sound = (snd.get(self.tracker.audio.status, self.tracker.audio.status)

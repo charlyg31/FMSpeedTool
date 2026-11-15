@@ -13,12 +13,13 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
   and nothing is read.
 - **Any ePSXe window size works** (tested from 640×480 to 1280×1024): the image is scaled to
   640×512, and black bars around the game (kept aspect ratio) are detected and removed.
-- **Framing on the deck screen**: if your ePSXe settings shift, stretch or zoom the picture a little
-  (resolution, cropping, video plugin), the deck digits are no longer where they should be. The first
-  time you open the deck, the tool finds the ORDER word, the DECK word and the bottom of the list and
-  corrects the picture by itself ("Framing found" in the log). The setting is kept and watched: if it
-  changes, the framing follows. Until it is done, the status line shows "framing: open the deck".
-  "Recalibrate" searches again.
+- **Automatic framing**: if your ePSXe settings shift, stretch or zoom the picture a little
+  (resolution, cropping, video plugin), the deck digits are no longer where they should be. From the
+  title screen (NEW GAME / LOAD...) or the game menu (CAMPAIGN / BUILD DECK...), the tool finds the
+  logo, the copyright and the hieroglyphs and corrects the picture by itself ("Framing found" in the
+  log); the deck screen is used too (ORDER and DECK words, bottom of the list). The setting is kept and
+  watched: if it changes, the framing follows. Until it is done, the status line shows "framing: title
+  screen or deck". "Recalibrate" searches again.
 - **LiveSplit with the script (recommended)**: copy `FMSpeedTool.asl` (shipped with the .exe) to the
   LiveSplit folder, then right click > Edit Layout… > (+) > Control > **Scriptable Auto Splitter** >
   Script Path: `FMSpeedTool.asl`. Tick Start / Split / Reset and, in the script settings, the splits
@@ -35,8 +36,8 @@ the game: for example an OBS windowed projector of your capture card source (rig
 source > Windowed Projector). This window must stay visible and show only the game, with no
 overlay on top.
 - **Automatic framing**: on the title menu (NEW GAME / LOAD...) or on the first duel, the tool
-  sets the vertical offset of your capture setup by itself, then the full framing (width and
-  height) when you open the deck, like for ePSXe ("Framing found" in the log). It is kept;
+  sets the full framing (width and height) of your capture setup by itself, like for ePSXe
+  ("Framing found" in the log). It is kept;
   "Recalibrate" searches again (after changing a setting).
 - **Digits**: the PS2 video output draws the digits slightly differently. PS2 digits are built in.
 - Tested on A3r1uS's PS2 run (YouTube video): run followed from start to end, framing found on the

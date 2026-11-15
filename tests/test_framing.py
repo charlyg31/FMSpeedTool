@@ -1,4 +1,4 @@
-"""Cadrage de l'image sur l'ecran du deck (ePSXe decale, etire ou zoome)."""
+"""Cadrage de l'image sur l'ecran titre et l'ecran du deck (ePSXe decale, etire ou zoome)."""
 
 import os
 import sys
@@ -14,6 +14,7 @@ import deckscreen  # noqa: E402
 import vision  # noqa: E402
 
 CAPTURE = os.path.join(ROOT, "captures", "deck_live_p0.png")
+TITLE = os.path.join(ROOT, "captures", "title1.png")          # ecran titre, ePSXe 1920x1536
 pytestmark = pytest.mark.skipif(not os.path.exists(CAPTURE), reason="dossier captures/ absent")
 REF = os.path.join(ROOT, "fm_speedtool", "assets", "hud_ref.png")
 WARPS = [(4, 0, 1, 1), (0, -6, 1, 1), (-10, 0, 1.03, 1), (10, 8, 0.97, 0.97),
@@ -22,6 +23,15 @@ WARPS = [(4, 0, 1, 1), (0, -6, 1, 1), (-10, 0, 1.03, 1), (10, 8, 0.97, 0.97),
 
 def _warp(img, dx, dy, sx, sy):
     return cv2.warpAffine(img, np.float32([[sx, 0, dx], [0, sy, dy]]), (640, 512))
+
+
+def _calibrate(fr, img, tries=30):
+    """Mesures successives (une echelle de plus essayee a chaque fois) jusqu'au calage."""
+    return any(fr.calibrate(img) for _ in range(tries))
+
+
+def _title():
+    return vision.normalize(vision.GameArea().crop(cv2.imread(TITLE)))
 
 
 def _rows(img):
@@ -42,14 +52,48 @@ def test_image_decalee_recalee(warp):
     img = cv2.imread(CAPTURE)
     moved = _warp(img, *warp)
     fr = vision.Framing(REF, vertical=False)
-    assert fr.calibrate(moved)
+    assert _calibrate(fr, moved)
     dx, dy, sx, sy = warp
     for p in (0, 640):
         assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 1.5
     for p in (0, 512):
         assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 1.5
-    # Les lignes du deck se relisent comme sur l'image d'origine.
-    assert _rows(fr.apply(moved)) == _rows(img)
+    # Les lignes du deck se relisent comme sur l'image d'origine (au-dela de 6 %, la double
+    # mise a l'echelle du test floute trop les chiffres).
+    if max(abs(sx - 1), abs(sy - 1)) <= 0.06:
+        assert _rows(fr.apply(moved)) == _rows(img)
+
+
+def test_petit_ecart_immediat():
+    """Ecart courant (decalage, 3 %) : cale des la premiere mesure."""
+    for warp in WARPS[:4]:
+        fr = vision.Framing(REF, vertical=False)
+        assert fr.calibrate(_warp(cv2.imread(CAPTURE), *warp)), warp
+
+
+def test_ecran_titre_inchange():
+    fr = vision.Framing(REF, vertical=False)
+    assert fr.calibrate(_title())
+    assert (fr.dx, fr.dy, fr.sx, fr.sy) == (0.0, 0.0, 1.0, 1.0)
+
+
+@pytest.mark.parametrize("warp", WARPS[:4] + [(-38, -26, 1.12, 1.1)])
+def test_ecran_titre_recale(warp):
+    moved = _warp(_title(), *warp)
+    fr = vision.Framing(REF, vertical=False)
+    assert _calibrate(fr, moved)
+    dx, dy, sx, sy = warp
+    for p in (0, 640):
+        assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 1.5
+    for p in (0, 512):
+        assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 1.5
+
+
+def test_rien_hors_titre_et_deck():
+    """Duel, carte posee... : aucun calage."""
+    for name in ("e1", "d3", "k2", "fd2"):
+        img = vision.normalize(vision.GameArea().crop(cv2.imread(os.path.join(ROOT, "captures", name + ".png"))))
+        assert not _calibrate(vision.Framing(REF, vertical=False), img, 5), name
 
 
 def test_surveillance_suit_un_changement():
