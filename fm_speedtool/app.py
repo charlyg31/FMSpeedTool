@@ -34,7 +34,8 @@ DEFAULT_CONFIG = {
     "language": "",               # "" = langue de Windows (francais ou anglais)
     "source": "epsxe",            # "epsxe" (fenetre ePSXe) ou "ps2" (carte d'acquisition)
     "ps2_window": "",             # titre de la fenetre qui affiche la PS2 (projecteur OBS...)
-    "ps2_framing": None,          # [dy, sy] cadrage PS2 trouve (None : a chercher)
+    "ps2_framing": None,          # [dy, sy, dx, sx, complet] cadrage PS2 trouve (None : a chercher)
+    "epsxe_framing": None,        # idem pour la fenetre ePSXe
     "use_audio": True,            # le son du jeu tranche entre fusion et equipement
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
@@ -76,7 +77,7 @@ class Worker(threading.Thread):
         self.events.put((kind, msg))
         if kind == "framing":
             fr = self.app.tracker.framing
-            self.app.cfg["ps2_framing"] = [fr.dy, fr.sy]
+            self.app.cfg[self.app.framing_key] = fr.values() if fr.locked else None
             self.app._save_config()
         if kind not in ("split", "new_run", "save", "undo"):
             return
@@ -171,10 +172,10 @@ class App:
         self.tracker = tracker.Tracker(self.digits, self.builtin, None,
                                        lambda k, m: self.worker.on_event(k, m), deck=self.deck)
         self.tracker.options.update(self.cfg["options"])
-        if ps2:
-            saved = self.cfg.get("ps2_framing")
-            self.tracker.framing = vision.Framing(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
-                                                  *(saved or (0.0, 1.0)), locked=bool(saved))
+        # Cadrage de l'image (ePSXe et PS2) : cale sur l'ecran du deck, garde d'une session a l'autre.
+        self.framing_key = "ps2_framing" if ps2 else "epsxe_framing"
+        self.tracker.framing = vision.Framing.from_values(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
+                                                          self.cfg.get(self.framing_key), vertical=ps2)
         self._setup_audio()
         self.worker = Worker(self)
         self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None)
@@ -238,8 +239,8 @@ class App:
         self.ps2_box.bind("<<ComboboxSelected>>", lambda e: self._set_ps2_window())
         self.ps2_box.bind("<Return>", lambda e: self._set_ps2_window())
         self.ps2_recal = ttk.Button(top, text=_("Recaler"), command=self._recalibrate)
+        self.ps2_recal.pack(side="right")
         if self.source.get() == "ps2":
-            self.ps2_recal.pack(side="right")
             self.ps2_box.pack(side="right", padx=4)
             ttk.Label(top, text=_("Fenetre :")).pack(side="right")
         ttk.Radiobutton(top, text="PS2", value="ps2", variable=self.source,
@@ -335,15 +336,18 @@ class App:
         self._log(_("Fenetre PS2 : {title}", title=title))
 
     def _recalibrate(self):
-        """Oublie le cadrage PS2 : il sera recherche des que le panneau LP/COM/YOU s'affiche."""
+        """Oublie le cadrage : il sera recherche des que l'ecran du deck s'affiche
+        (PS2 : ou le panneau LP/COM/YOU, ou le menu titre)."""
         fr = self.tracker.framing
         if fr is None:
             return
         with self.worker.lock:
-            fr.dy, fr.sy, fr.locked, fr.votes = 0.0, 1.0, False, []
-        self.cfg["ps2_framing"] = None
+            fr.reset()
+            self.tracker.framing_next = 0.0
+            self.tracker.deck_wait = None
+        self.cfg[self.framing_key] = None
         self._save_config()
-        self._log(_("Cadrage PS2 : recherche en cours (affiche un duel)"))
+        self._log(_("Cadrage : recherche en cours (ouvre l'ecran du deck)"))
 
     def _set_language(self):
         code = next((c for c, n in self.langs.items() if n == self.lang_var.get()), None)
@@ -708,10 +712,10 @@ class App:
             ls = _("TCP connecte") if self.livesplit.connected else _("TCP deconnecte")
         def val(x):
             return "-" if x is None else x
-        src = "ePSXe"
-        if self.tracker.framing is not None:
-            fr = self.tracker.framing
-            src = "PS2" + ("" if fr.locked else " " + _("(cadrage en attente d'un duel)"))
+        fr = self.tracker.framing
+        src = "PS2" if self.cfg.get("source") == "ps2" else "ePSXe"
+        if fr is not None and not fr.full:
+            src += " " + _("(cadrage : ouvre le deck)")
         snd = {"OK": _("son OK"), "silence": _("pas de son du jeu"), "indisponible": _("son indisponible"),
                "en attente du jeu": _("son en attente")}
         sound = (snd.get(self.tracker.audio.status, self.tracker.audio.status)

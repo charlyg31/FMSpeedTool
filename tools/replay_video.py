@@ -43,9 +43,10 @@ def main(folder, start=0, end=10 ** 9):
         import audio
         tr.audio = audio.FileSource(os.environ["FM_AUDIO"])
         tr.audio_clf = audio.Classifier(os.path.join(ROOT, "fm_speedtool", "assets", "audio_templates.npz"))
-    if os.environ.get("FM_PS2"):
-        # Mode PS2 : chiffres PS2 livres + calage automatique du cadrage.
-        tr.framing = vision.Framing(os.path.join(ROOT, "fm_speedtool", "assets", "hud_ref.png"))
+    if not os.environ.get("FM_NOFRAME"):
+        # Calage automatique du cadrage, comme le logiciel (PS2 : aussi vertical sur le HUD).
+        tr.framing = vision.Framing(os.path.join(ROOT, "fm_speedtool", "assets", "hud_ref.png"),
+                                    vertical=bool(os.environ.get("FM_PS2")))
     real = {}
     with open(os.path.join(folder, "index.csv")) as f:
         prev = None

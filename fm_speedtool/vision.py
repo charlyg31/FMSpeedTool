@@ -86,40 +86,170 @@ class GameArea:
 
 
 class Framing:
-    """Cadrage vertical d'une source console (PS2 + carte d'acquisition).
+    """Cadrage de l'image du jeu (fenetre ePSXe, ou PS2 + carte d'acquisition).
 
-    Selon la console, la carte d'acquisition et OBS, l'image du jeu est un peu
-    decalee ou etiree verticalement par rapport a ePSXe. On cherche le
-    decalage (dy) et l'etirement (sy) qui ramenent le panneau LP/COM/YOU a sa
-    place ePSXe, d'apres des images de reference : le panneau du duel et le menu
-    de l'ecran titre (LOAD / 2P DUEL / TRADE / OPTION), qui passe avant chaque run,
-    donc avant le premier check du deck. Le reglage n'est retenu qu'apres plusieurs
-    mesures concordantes, puis il ne bouge plus (et il est garde d'une session a l'autre)."""
+    Selon le reglage d'ePSXe (resolution, recadrage, plugin video), la console, la
+    carte d'acquisition et OBS, l'image du jeu est un peu decalee ou etiree par
+    rapport aux positions attendues : 4 pixels suffisent a ne plus lire les chiffres
+    du deck. On cherche donc la correction (dx, dy, sx, sy) : sortie = s * entree + d.
+
+    - Ecran du deck (calage complet) : trois reperes fixes, loin des bords (qu'un zoom
+      d'ePSXe peut couper) : le mot ORDER et le mot DECK en haut, qui donnent la largeur,
+      et le bas du cadre de la liste (sous le surlignage du curseur), qui donne la
+      hauteur avec ceux du haut. Reperes pris sur une capture directe d'ePSXe.
+    - PS2 en attendant : panneau LP/COM/YOU ou menu de l'ecran titre (LOAD / 2P DUEL /
+      TRADE / OPTION), calage vertical seulement ; l'ecran du deck le complete ensuite.
+    Un reglage n'est retenu qu'apres une mesure tres sure ou plusieurs concordantes, et
+    il est garde d'une session a l'autre. Une fois cale, l'ecran du deck reste surveille
+    (de temps en temps) : si le reglage d'ePSXe change, le cadrage suit."""
 
     REFS = (("hud_ref.png", (490, 25, 140, 90)), ("title_ref.png", (230, 140, 180, 260)))
     SCALES = [round(0.86 + 0.02 * i, 2) for i in range(15)]       # 0,86 .. 1,14
     OFFSETS = list(range(-40, 41, 2))                              # pixels (image 640x512)
+    # Reperes de l'ecran du deck : coin haut gauche a leur place attendue.
+    DECK_REFS = (("deck_ref_a.png", (132, 20)), ("deck_ref_b.png", (486, 10)), ("deck_ref_c.png", (130, 449)))
+    DECK_OFF = 64                                                   # recherche a +-64 px
+    SCALE_LIMIT = (0.84, 1.16)
     GOOD = 0.85                                                     # correlation minimale
     SURE = 0.93                                                     # une seule mesure suffit
+    DECK_SURE = 0.95
+    DEAD_ZONE = 2.5         # correction plus petite (coins) : image laissee telle quelle
+    DECK_PRESCALES = (1.0, 0.94, 1.06, 0.88, 1.12)                  # 1re recherche, image tres etiree
     VOTES = 3
 
-    def __init__(self, ref_path, dy=0.0, sy=1.0, locked=False):
+    def __init__(self, ref_path, dy=0.0, sy=1.0, locked=False, dx=0.0, sx=1.0, full=False,
+                 vertical=True):
         folder = os.path.dirname(ref_path)
         self.refs = []
-        for name, rect in self.REFS:
+        if vertical:                      # PS2 : calage vertical sur le panneau LP / menu titre
+            for name, rect in self.REFS:
+                ref = cv2.imread(os.path.join(folder, name), cv2.IMREAD_GRAYSCALE)
+                if ref is not None:
+                    self.refs.append((rect, ref.astype(np.float32)))
+        self.deck_refs = []
+        for name, (x, y) in self.DECK_REFS:
             ref = cv2.imread(os.path.join(folder, name), cv2.IMREAD_GRAYSCALE)
             if ref is not None:
-                self.refs.append((rect, ref.astype(np.float32)))
+                self.deck_refs.append(((x, y), ref.astype(np.float32)))
+        if len(self.deck_refs) != len(self.DECK_REFS):
+            self.deck_refs = []
         self.ref = self.refs[0][1] if self.refs else None
-        self.dy, self.sy, self.locked = float(dy), float(sy), bool(locked) and bool(self.refs)
+        self.dx, self.dy, self.sx, self.sy = float(dx), float(dy), float(sx), float(sy)
+        self.full = bool(full) and bool(locked) and bool(self.deck_refs)
+        self.locked = bool(locked) and bool(self.refs or self.full)
         self.votes = []
+        self.deck_votes = []
         self.score = 0.0
 
+    @property
+    def done(self):
+        """Calage complet, ou vertical sans reperes de deck : il reste seulement a surveiller."""
+        return self.full or (self.locked and not self.deck_refs)
+
+    @staticmethod
+    def _shift(m):
+        """Deplacement maximal (px) d'un bord de l'image par la correction m (score, dx, dy, sx, sy)."""
+        return max([abs((m[3] - 1) * x + m[1]) for x in (0, W)] + [abs((m[4] - 1) * y + m[2]) for y in (0, H)])
+
+    def differs(self, m, tol=1.5):
+        """Le reglage mesure m deplace-t-il un bord de l'image de plus de tol px par rapport a l'actuel ?"""
+        return any(abs((m[3] - self.sx) * x + m[1] - self.dx) > tol for x in (0, W)) or             any(abs((m[4] - self.sy) * y + m[2] - self.dy) > tol for y in (0, H))
+
+    def reset(self):
+        self.dx, self.dy, self.sx, self.sy = 0.0, 0.0, 1.0, 1.0
+        self.locked = self.full = False
+        self.votes, self.deck_votes, self.score = [], [], 0.0
+
+    def values(self):
+        """Pour la configuration : [dy, sy, dx, sx, complet]."""
+        return [self.dy, self.sy, self.dx, self.sx, self.full]
+
+    @classmethod
+    def from_values(cls, ref_path, saved, vertical=True):
+        """Reglage garde dans la configuration ([dy, sy] des versions precedentes accepte)."""
+        if not saved:
+            return cls(ref_path, vertical=vertical)
+        v = list(saved) + [None] * 5
+        return cls(ref_path, v[0], v[1], True, v[2] or 0.0, v[3] or 1.0, bool(v[4]), vertical=vertical)
+
     def apply(self, img):
-        if self.dy == 0 and self.sy == 1.0:
+        if self.dx == 0 and self.dy == 0 and self.sx == 1.0 and self.sy == 1.0:
             return img
-        m = np.float32([[1, 0, 0], [0, self.sy, self.dy]])
+        m = np.float32([[self.sx, 0, self.dx], [0, self.sy, self.dy]])
         return cv2.warpAffine(img, m, (W, H), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+
+    # --- ecran du deck : calage complet -------------------------------------------
+
+    @staticmethod
+    def _find(gray, x, y, ref, off):
+        """Position (score, x, y) du repere cherche autour de (x, y), a +-off pixels."""
+        h, w = ref.shape
+        pad = cv2.copyMakeBorder(gray, off, off, off, off, cv2.BORDER_CONSTANT, value=0)
+        win = pad[y:y + h + 2 * off, x:x + w + 2 * off]
+        if win.shape[0] < h or win.shape[1] < w:
+            return 0.0, x, y
+        r = cv2.matchTemplate(win, ref, cv2.TM_CCOEFF_NORMED)
+        _, m, _, loc = cv2.minMaxLoc(r)
+        return float(m), x - off + loc[0], y - off + loc[1]
+
+    def _deck_found(self, gray, sx, sy, off):
+        found = []
+        for (x, y), ref in self.deck_refs:
+            if (sx, sy) != (1.0, 1.0):
+                h, w = ref.shape
+                ref = cv2.resize(ref, (max(8, int(round(w / sx))), max(8, int(round(h / sy)))),
+                                 interpolation=cv2.INTER_AREA)
+                x, y = int(round(x / sx)), int(round(y / sy))
+            found.append(self._find(gray, x, y, ref, off))
+        return found
+
+    def measure_deck(self, img, prescales=None):
+        """(score, dx, dy, sx, sy) qui ramenent les reperes de l'ecran du deck a leur
+        place, ou None. Puis deux passes sur l'image deja corrigee, pour affiner."""
+        if not self.deck_refs:
+            return None
+        gray0 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        (rax, ray), (rbx, rby), (_, rcy) = (p for p, _ in self.deck_refs)
+        t = (0.0, 0.0, 1.0, 1.0)
+        score = 0.0
+        for off in (self.DECK_OFF, 6, 3):
+            dx, dy, sx, sy = t
+            if off == self.DECK_OFF:
+                # Reperes a leur taille, puis (image tres etiree) a d'autres echelles.
+                found = None
+                pre = self.DECK_PRESCALES if prescales is None else prescales
+                for psx in pre:
+                    for psy in pre:
+                        f = self._deck_found(gray0, psx, psy, off)
+                        if found is None or min(v[0] for v in f) > min(v[0] for v in found):
+                            found = f
+                        if min(v[0] for v in found) >= 0.9:
+                            break
+                    if min(v[0] for v in found) >= 0.9:
+                        break
+            else:
+                gray = cv2.warpAffine(gray0, np.float32([[sx, 0, dx], [0, sy, dy]]), (W, H),
+                                      flags=cv2.INTER_LINEAR)
+                found = self._deck_found(gray, 1.0, 1.0, off)
+            score = min(f[0] for f in found)
+            if score < self.GOOD - 0.2:
+                return None
+            (_, ax, ay), (_, bx, by), (_, _, cy) = found
+            if bx - ax < 250 or cy - (ay + by) / 2 < 250:
+                return None
+            # Correction de l'image deja corrigee : u -> k * u + e.
+            kx = (rbx - rax) / (bx - ax)
+            ex = (rax - kx * ax + rbx - kx * bx) / 2
+            ky = (rcy - (ray + rby) / 2) / (cy - (ay + by) / 2)
+            ey = (ray - ky * ay + rby - ky * by) / 2
+            t = (kx * dx + ex, ky * dy + ey, kx * sx, ky * sy)
+        dx, dy, sx, sy = t
+        lo, hi = self.SCALE_LIMIT
+        if not (lo <= sx <= hi and lo <= sy <= hi):
+            return None
+        return score, round(dx, 1), round(dy, 1), round(sx, 4), round(sy, 4)
+
+    # --- PS2 : calage vertical (panneau LP / menu titre) ----------------------------
 
     def measure(self, img):
         """Meilleur (score, dy, sy) pour cette image, ou None si pas de panneau."""
@@ -146,8 +276,30 @@ class Framing:
         return best
 
     def calibrate(self, img):
-        """A appeler de temps en temps sur une image normalisee ; True si le reglage change."""
-        if self.locked:
+        """A appeler de temps en temps sur une image normalisee (non corrigee) ;
+        True si le reglage change. Une fois cale : surveillance de l'ecran du deck."""
+        # Deja cale : mesure rapide (sans recherche d'echelle), un changement doit etre
+        # confirme par plusieurs mesures.
+        m = self.measure_deck(img, (1.0,) if self.full else None)
+        if m is not None and m[0] >= self.GOOD:
+            key = tuple(int(round(v)) for v in (m[1], m[2], m[3] * 640, m[4] * 512))
+            close = [k for k in self.deck_votes if max(abs(a - b) for a, b in zip(k, key)) <= 1]
+            self.deck_votes = (close + [key])[-self.VOTES:]
+            sure = len(self.deck_votes) == self.VOTES or (m[0] >= self.DECK_SURE and not self.full)
+            if sure:
+                # Decalage de 2 px ou moins : les lectures le tolerent deja (+-2 px), et
+                # corriger ne ferait que retoucher l'image d'un reglage qui marche.
+                if self._shift(m) <= self.DEAD_ZONE:
+                    m = (m[0], 0.0, 0.0, 1.0, 1.0)
+            if sure and (not self.full or self.differs(m)):
+                self.dx, self.dy, self.sx, self.sy = m[1], m[2], m[3], m[4]
+                self.score, self.locked, self.full = m[0], True, True
+                self.deck_votes = []
+                return True
+            return False
+        if self.full:
+            return False
+        if self.locked or not self.refs:
             return False
         m = self.measure(img)
         if m is None or m[0] < self.GOOD:

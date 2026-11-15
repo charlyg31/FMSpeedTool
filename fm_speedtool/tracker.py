@@ -26,6 +26,7 @@ REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defil
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
 FACE_UP_BACK = 0.45      # score du dos de carte sous lequel la carte est face visible (0,25-0,31)
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
+DECK_FRAMING_WAIT = 1.0  # ecran du deck pas encore cale : lecture retenue au plus aussi longtemps
 PLACE_CANCEL = 1.0       # choix de la case annule : l'ecran d'orientation revient dans ce delai (~0,3 s)
 # Types de split (transmis au script LiveSplit, qui filtre selon ses reglages)
 SPLIT_WIN, SPLIT_FIRST_LOSS, SPLIT_FARM, SPLIT_OTHER = 1, 2, 3, 4
@@ -48,8 +49,9 @@ class Tracker:
         self.area = vision.GameArea()     # zone de jeu dans la fenetre (bandes noires)
         self.on_password_screen = False   # ecran PASSWORD du jeu affiche
         self.last_frame = None
-        self.framing = None               # vision.Framing pour une source console (PS2)
+        self.framing = None               # vision.Framing : cadrage de l'image du jeu
         self.framing_next = 0.0
+        self.deck_wait = None             # debut de l'attente du cadrage sur l'ecran du deck (une fois)
         self.audio = None                 # source du son du jeu (audio.LiveSource / FileSource) ou None
         self.audio_clf = None             # audio.Classifier : fusion ou equipement au son
         self.sound_pending = []           # [(instant, choix de l'image)] en attente du son
@@ -116,6 +118,15 @@ class Tracker:
 
     # --- boucle ----------------------------------------------------------------
 
+    def _calibrate(self, raw):
+        """Cadrage sur cette image (non corrigee) ; True s'il vient de changer."""
+        fr = self.framing
+        if not fr.calibrate(raw):
+            return False
+        self.on_event("framing", _("Cadrage trouve (decalage {dx:+.0f} / {dy:+.0f}, echelle {sx:.3f} / {sy:.3f})",
+                                   dx=fr.dx, dy=fr.dy, sx=fr.sx, sy=fr.sy))
+        return True
+
     def process(self, frame, now=None, normalized=False):
         now = time.monotonic() if now is None else now
         self.last_now = now
@@ -126,14 +137,13 @@ class Tracker:
         if img is None:
             return
         if self.framing is not None:
-            # Console : cale le cadrage vertical sur le menu titre ou le panneau LP/COM/YOU (4 fois/s
-            # tant qu'il n'est pas trouve), puis l'applique a chaque image.
-            if not self.framing.locked and now >= self.framing_next:
-                self.framing_next = now + 0.25
-                if self.framing.calibrate(img):
-                    self.on_event("framing", _("Cadrage PS2 trouve (decalage {dy:+.0f}, echelle {sy:.2f})",
-                                               dy=self.framing.dy, sy=self.framing.sy))
-            img = self.framing.apply(img)
+            # Cale l'image sur l'ecran du deck (ou en attendant, PS2 : menu titre / panneau
+            # LP/COM/YOU), 4 fois/s tant que ce n'est pas fait, puis surveille toutes les 2 s.
+            raw = img
+            if now >= self.framing_next:
+                self.framing_next = now + (2.0 if self.framing.done else 0.25)
+                self._calibrate(raw)
+            img = self.framing.apply(raw)
         self.last_frame = img
         prep = vision.prepare(img)
         matches = {t.action: t for t in self.builtin.matching(img, prep)}
@@ -175,6 +185,19 @@ class Tracker:
         if self.deck is not None:
             screen = ("deck" if "deck_screen" in matches else
                       "chest" if "chest_screen" in matches else None)
+            fr = self.framing
+            if (screen == "deck" and fr is not None and not fr.full
+                    and (self.deck_wait is None or now - self.deck_wait < DECK_FRAMING_WAIT)):
+                # Pas encore cale : on cale sur cette image du deck meme, et on ne la lit pas
+                # tant que ce n'est pas fait (une lecture decalee ajoute de fausses cartes) ;
+                # au plus DECK_FRAMING_WAIT s en tout, si le calage n'aboutit jamais.
+                if self.deck_wait is None:
+                    self.deck_wait = now
+                if self._calibrate(raw):
+                    img = fr.apply(raw)
+                else:
+                    screen = "skip"
+        if self.deck is not None and screen != "skip":
             for kind, name in self.deck.frame(screen, img):
                 self.on_event("deck", (_("Deck : ajout de {name}", name=name) if kind == "+"
                                         else _("Deck : retrait de {name}", name=name)))
