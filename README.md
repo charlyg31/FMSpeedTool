@@ -94,10 +94,12 @@ On the deck building screens the tool reads:
 - **CHEST screen**: only **additions** count (a card whose "in deck" number goes up); removals are
   read on the DECK screen only.
 
-The first deck check sets the base: scroll the deck once (R1, about one page every 0.2 s or slower
-is fine); the deck is complete when every position up to the displayed counter has been read (40,
-or fewer right after a removal). After that only additions and removals change it. Multiple copies
-are counted. Checked live on ePSXe: 40/40 cards with R1 every 0.2 s, same result as a slow read.
+The first deck check sets the base: scroll the deck once with R1, as fast as you like; the deck is
+complete when every position up to the displayed counter has been read (40, or fewer right after a
+removal). After that only additions and removals change it. Multiple copies are counted. The game
+does not scroll faster than about 0.15 s per page, even when R1 is pressed faster: checked live on
+ePSXe, 40/40 cards at that top speed (the tool analyses 58 to 60 frames/s on this screen), same
+result as a slow read.
 Types and ATK come from the YGO-FM-FusionCalc database.
 
 ## Final 6

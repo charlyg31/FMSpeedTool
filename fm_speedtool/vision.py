@@ -774,9 +774,13 @@ class ScreenTemplate:
 
     def score(self, img, prep=None):
         """prep : prepare(img), pour ne convertir l'image qu'une fois par image."""
-        gray, gray_half = prep if prep is not None else prepare(img)
         x, y, w, h = self.rect
         pad = self.pad
+        # Pre-test tres rapide : couleur moyenne a la place prevue trop differente, ce n'est
+        # pas cet ecran (sur 27 000 images de runs, les vrais ecrans restent a 40 au plus).
+        if pad <= 20 and max(abs(a - b) for a, b in zip(cv2.mean(img[y:y + h, x:x + w])[:3], self.mean_color)) > 60:
+            return 0.0
+        gray, gray_half = prep if prep is not None else prepare(img)
         x0, y0 = max(0, x - pad), max(0, y - pad)
         x1, y1 = min(W, x + w + pad), min(H, y + h + pad)
         if self.half:

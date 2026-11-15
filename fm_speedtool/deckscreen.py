@@ -30,26 +30,37 @@ def row_y(r):
 
 
 def _norm(mask):
-    if mask.sum() < 6:
+    """Glyphe recadre sur ses pixels allumes, ramene en 8x12 (appels OpenCV : rapide)."""
+    if cv2.countNonZero(mask) < 6:
         return None
-    ys, xs = np.nonzero(mask)
-    m = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    return cv2.resize(m.astype(np.float32), GLYPH, interpolation=cv2.INTER_AREA)
+    x, y, w, h = cv2.boundingRect(mask)
+    return cv2.resize(mask[y:y + h, x:x + w].astype(np.float32), GLYPH, interpolation=cv2.INTER_AREA)
 
 
 def white_glyph(c):
     """Chiffre blanc sur fond sombre : lignes de l'ecran DECK (seuil fixe)."""
-    return _norm((c.min(axis=2) > 140).astype(np.uint8))
+    return _white(c.min(axis=2))
 
 
 def white_glyph_rel(c):
     """Chiffre clair, seuil relatif : compteur du deck et numeros du coffre (la
     ligne sous le curseur du coffre a des chiffres estompes)."""
-    g = c.min(axis=2)          # le cadre orange du curseur a un canal bleu faible
+    return _white_rel(c.min(axis=2))   # le cadre orange du curseur a un canal bleu faible
+
+
+# Memes calculs a partir du minimum des 3 couleurs, calcule une fois par image.
+def _white(g):
+    return _norm((g > 140).astype(np.uint8))
+
+
+def _white_rel(g):
     top = int(g.max())
     if top < 90:
         return None
     return _norm((g > min(140, top * 0.6)).astype(np.uint8))
+
+
+ON_MIN = {white_glyph: _white, white_glyph_rel: _white_rel}
 
 
 def dark_glyph(c):
@@ -65,23 +76,53 @@ def dark_glyph(c):
     return _norm(m)
 
 
+# Recherche a +-2 px, les positions les plus proches d'abord (0, 0 compris : seuil plus large).
+JITTER = sorted(((dx, dy) for dy in range(-2, 3) for dx in range(-2, 3)),
+                key=lambda d: (abs(d[0]) + abs(d[1]), d))
+NEAR = 9                  # (0, 0) et les 8 positions a 1 px (dont les diagonales)
+# Rien de ressemblant a un chiffre a 1 px pres : on abandonne (ligne qui defile, case vide).
+# Sur 4081 chiffres lus apres recherche (videos, captures, defilement R1), le meilleur
+# score a 1 px pres n'a jamais depasse 0,31.
+GIVE_UP = 0.35
+
+
 class Digits:
     def __init__(self, path, glyph_fn):
         self.glyph_fn = glyph_fn
         self._stack = None
+        self._img = self._gmin = None
         self.vecs, self.labels = [], []
         if os.path.exists(path):
             data = np.load(path)
             self.vecs = list(data["vecs"].astype(np.float32))
             self.labels = [str(x) for x in data["labels"]]
 
+    def _min_img(self, img):
+        """Minimum des 3 couleurs de toute l'image, calcule une fois par image."""
+        if self._img is not img:
+            b, g, r = cv2.split(img)
+            self._img, self._gmin = img, cv2.min(cv2.min(b, g), r)
+        return self._gmin
+
+    def _at(self, img, x, y, w, h, fn):
+        """Case (x, y) de l'image : distance au gabarit le plus proche."""
+        fast = ON_MIN.get(fn)
+        if fast is not None:
+            return self._nearest_vec(fast(self._min_img(img)[y:y + h, x:x + w]))
+        return self._nearest(img[y:y + h, x:x + w], fn)
+
     def _nearest(self, c, fn):
-        vec = fn(c)
+        return self._nearest_vec(fn(c))
+
+    def _nearest_vec(self, vec):
         if vec is None or not self.vecs:
             return None, 9.0
         if self._stack is None:
-            self._stack = np.stack(self.vecs)
-        d = np.abs(self._stack - vec).mean(axis=(1, 2))   # tous les gabarits d'un coup
+            self._stack = np.ascontiguousarray(np.stack(self.vecs).reshape(len(self.vecs), -1))
+            self._buf = np.empty_like(self._stack)
+        # Distance moyenne a tous les gabarits d'un coup (tampon reutilise).
+        d = np.abs(np.subtract(self._stack, vec.reshape(-1), out=self._buf), out=self._buf).sum(axis=1)
+        d /= self._stack.shape[1]
         i = int(np.argmin(d))
         return self.labels[i], float(d[i])
 
@@ -93,18 +134,25 @@ class Digits:
         """Lecture directe ; si elle echoue (image floue d'un stream, capture d'une
         autre taille), on cherche a +-2 px et avec un seuil relatif, avec un seuil
         un peu plus large. Verifie sur deux videos de stream : 24 lignes sur 24."""
-        ch = self.classify(img[y:y + h, x:x + w])
-        if ch is not None:
+        ch, d = self._at(img, x, y, w, h, self.glyph_fn)
+        if d < 0.12:
             return ch
+        # Positions les plus proches d'abord ; arret des qu'un chiffre est sur (meme seuil
+        # que la lecture directe), ou des que rien n'y ressemble a 1 px pres.
         best = (None, 9.0)
-        for fn in (self.glyph_fn, white_glyph_rel) if self.glyph_fn is white_glyph else (self.glyph_fn,):
-            for dy in (-2, -1, 0, 1, 2):
-                for dx in (-2, -1, 0, 1, 2):
+        fns = (self.glyph_fn, white_glyph_rel) if self.glyph_fn is white_glyph else (self.glyph_fn,)
+        for offsets in (JITTER[:NEAR], JITTER[NEAR:]):
+            for fn in fns:
+                for dx, dy in offsets:
                     if y + dy < 0 or x + dx < 0:
                         continue
-                    r = self._nearest(img[y + dy:y + dy + h, x + dx:x + dx + w], fn)
+                    r = self._at(img, x + dx, y + dy, w, h, fn)
                     if r[1] < best[1]:
                         best = r
+                        if best[1] < 0.12:
+                            return best[0]
+            if best[1] > GIVE_UP:
+                return None
         return best[0] if best[1] < 0.17 else None
 
     def read(self, img, cells, w=CELL_W, h=CELL_H):
@@ -187,7 +235,10 @@ class DeckWatcher:
       disparue a ete retiree (ou celle apparue ajoutee).
     - DECK : le compteur baisse de 1 -> la carte sous le curseur est retiree.
     Les positions 1..40 lues (et recalees a chaque changement) fixent le deck.
-    Chaque lecture doit etre identique sur 2 images de suite (defilement, clignotement)."""
+    Chaque lecture doit etre identique sur 2 images de suite (defilement, clignotement).
+    Pendant un defilement (R1 : la liste glisse en continu), la page entiere ne se
+    repete jamais : une ligne (position, carte) lue a l'identique sur 2 images de
+    suite remplit alors une position encore inconnue (sans ajout ni retrait)."""
 
     def __init__(self):
         self.deck = Counter()     # numero -> exemplaires (meilleure connaissance)
@@ -202,6 +253,7 @@ class DeckWatcher:
         self.seen_at = {}         # numero -> derniere observation (tic)
         self.tick = 0
         self._prev = None
+        self._prev_rows = set()   # lignes (position, carte) de l'image DECK precedente
         self._deck_hl_card = None
         self._chest_hl_card = None
         self._chest_rows = {}     # lignes du coffre de la derniere lecture stable
@@ -249,7 +301,15 @@ class DeckWatcher:
         rows = deck_rows(img, digits)
         count = deck_count(img, count_digits)
         hl = deck_highlight(img)
+        lines = set(rows.values())
+        confirmed, self._prev_rows = lines & self._prev_rows, lines
         if not self._stable("deck", (tuple(sorted(rows.items())), count, hl)):
+            # Defilement : lignes confirmees sur 2 images, positions encore inconnues seulement.
+            new = {pos: cid for pos, cid in confirmed if pos not in self.slots}
+            if new:
+                self.slots.update(new)
+                self._note_visible(new)
+                self._check_complete()
             return []
         events = []
         visible = dict(rows.values())
@@ -276,6 +336,11 @@ class DeckWatcher:
         if hl is not None and hl in rows:
             self._deck_hl_card = rows[hl][1]
         self.slots.update(visible)
+        self._note_visible(visible)
+        self._check_complete()
+        return events
+
+    def _note_visible(self, visible):
         for cid in visible.values():
             self.slot_tick[cid] = self.tick
         for cid in visible.values():
@@ -287,8 +352,6 @@ class DeckWatcher:
         for cid, n in Counter(self.slots.values()).items():
             if n > self.deck[cid]:
                 self.deck[cid] = n
-        self._check_complete()
-        return events
 
     def chest_frame(self, img, digits, box_digits, count_digits=None):
         """Coffre : seuls les AJOUTS comptent (retraits : ecran DECK uniquement).
@@ -355,6 +418,7 @@ class DeckWatcher:
 
     def other_frame(self):
         self._prev = None
+        self._prev_rows = set()
 
     def cards(self):
         """Deck estime, 40 cartes au plus. Le premier passage sur le deck (trie par

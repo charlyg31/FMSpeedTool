@@ -99,11 +99,12 @@ Sur les écrans de construction du deck, le logiciel lit :
 - **écran CHEST** : seuls les **ajouts** comptent (une carte dont le nombre « dans le deck »
   augmente) ; les retraits se lisent uniquement sur l'écran DECK.
 
-Le premier check du deck donne la base : fais défiler le deck une fois (R1, une page toutes les
-0,2 s environ ou plus lentement) ; le deck est complet quand toutes les positions jusqu'au compteur
-affiché sont lues (40, ou moins juste après un retrait). Ensuite seuls les ajouts et retraits le
-modifient. Les exemplaires multiples sont comptés. Vérifié en direct sur ePSXe : 40/40 cartes avec
-R1 toutes les 0,2 s, même résultat qu'une lecture lente. Les types et ATK viennent de la base de YGO-FM-FusionCalc
+Le premier check du deck donne la base : fais défiler le deck une fois avec R1, aussi vite que tu
+veux ; le deck est complet quand toutes les positions jusqu'au compteur affiché sont lues (40, ou
+moins juste après un retrait). Ensuite seuls les ajouts et retraits le modifient. Les exemplaires
+multiples sont comptés. Le jeu ne défile pas plus vite qu'environ 0,15 s par page, même en appuyant
+sur R1 plus vite : vérifié en direct sur ePSXe, 40/40 cartes à cette vitesse maximale (le logiciel
+analyse 58 à 60 images/s sur cet écran), même résultat qu'une lecture lente. Les types et ATK viennent de la base de YGO-FM-FusionCalc
 (`tools/make_carddb.py`), identique à la liste de yugiohfm.com.
 
 ## Final 6
