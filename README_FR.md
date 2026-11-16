@@ -163,4 +163,6 @@ ignorés sans lui.
 
 Merci à Hippochan, Exarion et lukadev pour les informations partagées.
 
+Merci aux joueurs qui ont essayé le logiciel et envoyé leurs retours : AEtienne.
+
 Licence MIT.

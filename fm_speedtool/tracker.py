@@ -529,8 +529,19 @@ class Tracker:
             self.battle["trap"] = True
             self.stats["trap"] += 1
             self.on_event("stat", _("Piege declenche +1"))
+        b = self.battle
         if sides:
-            self.battle["hist"].append(tuple(sorted(sides)))
+            b["hist"].append(tuple(sorted(sides)))
+            if len(sides) == 2:
+                # Les deux cartes encore la : la droite n'etait que cachee (eclat, flash du
+                # coup qui blanchit les deux cartes), rien n'est encore detruit.
+                b["both"], b["right_gone"], b["left_flash"] = True, False, False
+        # Defenseur detruit (les deux cartes vues, puis la gauche seule 2 fois de suite) :
+        # si la carte de l'attaquant flashe a son tour, elle est detruite aussi (ATK egales).
+        if b.get("both") and b["hist"][-2:] == [("left",), ("left",)]:
+            b["right_gone"] = True
+        if b.get("right_gone") and vision.card_flash(img, "left"):
+            b["left_flash"] = True
 
     def _resolve_battle(self):
         b, self.battle = self.battle, None
@@ -538,7 +549,8 @@ class Tracker:
         if not tail or b["trap"]:
             return
         final = max(set(tail), key=tail.count)
-        right_destroyed = final == ("left",)
+        # Gauche seule a la fin, mais detruite juste apres la droite : les deux sont detruits.
+        right_destroyed = final == ("left",) and not b.get("left_flash")
         if b["turn"] == "you" and right_destroyed and not b["right_def"]:
             self.stats["eff_atk"] += 1
             self.on_event("stat", _("Attaque efficace +1"))

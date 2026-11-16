@@ -28,6 +28,7 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
+VERSION = "1.17"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -147,13 +148,13 @@ class Worker(threading.Thread):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("FM Speed Tool")
+        root.title(f"FM Speed Tool v{VERSION}")
         root.geometry("1440x940")
         root.minsize(1100, 700)
         os.makedirs(APP_DIR, exist_ok=True)
         self.cfg = load_config()
         i18n.set_language(self.cfg.get("language") or i18n.system_language())
-        root.title(_("FM Speed Tool - Forbidden Memories (analyse d'image)"))
+        root.title(_("FM Speed Tool v{version} - Forbidden Memories (analyse d'image)", version=VERSION))
         try:
             self.bridge = livesplit_bridge.Bridge()
         except OSError:
@@ -502,8 +503,12 @@ class App:
         ttk.Checkbutton(box, text=_("Deck lu automatiquement (ecrans DECK / CHEST)"),
                         variable=self.deck_auto).pack(anchor="w")
         self.deck_info = tk.StringVar(value=_("Deck : pas encore vu"))
-        ttk.Label(box, textvariable=self.deck_info, foreground="#555", wraplength=460,
-                  justify="left").pack(anchor="w")
+        info = ttk.Frame(box)
+        info.pack(fill="x")
+        # Oublie le deck lu : compteurs a 0, puis relus des que la liste du deck defile.
+        ttk.Button(info, text=_("Relire le deck"), command=self._reset_deck).pack(side="right")
+        ttk.Label(info, textvariable=self.deck_info, foreground="#555", wraplength=360,
+                  justify="left").pack(side="left", anchor="w")
         grid = ttk.Frame(box)
         grid.pack(anchor="w")
         self.f6_vars = {}
@@ -550,6 +555,15 @@ class App:
         self.f6 = f6calc.F6Calculator(os.path.join(BASE_DIR, "assets", "f6_model.xlsx"))
         threading.Thread(target=self._load_f6, daemon=True).start()
         self._f6_job = None
+
+    def _reset_deck(self):
+        """Deck oublie (compteurs du Final 6 a 0) : relu en parcourant la liste du deck.
+        Recoche aussi la lecture automatique."""
+        with self.worker.lock:
+            self.deck.reset()
+        self.deck_auto.set(True)
+        self._deck_version = -1
+        self._log(_("Deck remis a 0 : parcours la liste du deck pour le relire"))
 
     def _set_deck_auto(self):
         self.cfg["deck_auto"] = self.deck_auto.get()

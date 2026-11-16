@@ -307,7 +307,15 @@ class DeckWatcher:
         count = deck_count(img, count_digits)
         hl = deck_highlight(img)
         lines = set(rows.values())
-        confirmed, self._prev_rows = lines & self._prev_rows, lines
+        prev = self._prev_rows
+        confirmed, self._prev_rows = lines & prev, lines
+        shown = {pos for pos, _ in lines}
+        if (len(prev) == ROWS and len(confirmed) >= ROWS - 2
+                and all(line in lines for line in prev if line[0] in shown)):
+            # Page entiere affichee une seule image (R1 des l'arrivee sur l'ecran) : l'image
+            # suivante, decalee d'1 ou 2 lignes, confirme toutes les lignes encore visibles
+            # -> celles qui viennent de sortir de l'ecran sont sures aussi.
+            confirmed = prev
         if not self._stable("deck", (tuple(sorted(rows.items())), count, hl)):
             # Defilement : lignes confirmees sur 2 images, positions encore inconnues seulement.
             new = {pos: cid for pos, cid in confirmed if pos not in self.slots}

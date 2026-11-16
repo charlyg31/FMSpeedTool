@@ -42,6 +42,39 @@ def _register_combin(formulas):
     formulas.get_functions()["COMBIN"] = combin
 
 
+def _register_exact_match():
+    """RECHERCHEV(...; FAUX) : Excel compare les nombres a 15 chiffres pres, la
+    bibliotheque formulas au bit pres. La cle cherchee par le tableur est une somme
+    de parts du deck (6 Thunders x 0,1 = 0,6000000000000001) : sans tolerance, elle
+    n'est pas trouvee dans la table et tout le calcul finit en #N/A."""
+    import numpy as np
+    from formulas.functions import look
+
+    if getattr(look.xmatch, "_tolerant", False):
+        return
+    exact = look.xmatch
+
+    def xmatch(lookup_value_type, lookup_value, lookup_value_raw, lookup_array_index,
+               lookup_array_type, lookup_array, lookup_array_raw, match_type=1):
+        if match_type == 0 and isinstance(lookup_value, (int, float, np.number)) \
+                and not isinstance(lookup_value, bool):
+            b = lookup_value_type == lookup_array_type
+            index, array = lookup_array_index[b], lookup_array[b]
+            try:
+                values = array.astype(float)
+            except (TypeError, ValueError):
+                values = None
+            if values is not None and len(values):
+                close = np.abs(values - float(lookup_value)) <= 1e-12 * max(1.0, abs(float(lookup_value)))
+                if close.any():
+                    return index[close][0]
+        return exact(lookup_value_type, lookup_value, lookup_value_raw, lookup_array_index,
+                     lookup_array_type, lookup_array, lookup_array_raw, match_type)
+
+    xmatch._tolerant = True
+    look.xmatch = xmatch
+
+
 class F6Calculator:
     def __init__(self, model_path):
         self.model_path = model_path
@@ -57,6 +90,7 @@ class F6Calculator:
         try:
             import formulas
             _register_combin(formulas)
+            _register_exact_match()
             xl = formulas.ExcelModel().loads(self.model_path).finish()
             inputs = [self._key(c) for c in list(FIELD_CELLS.values()) + [DARK_HOLE_CELL] + EQUIP_CELLS]
             outputs = [self._key(c) for c in OUT_CELLS]

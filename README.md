@@ -158,4 +158,6 @@ Rank formula: game rank table (same as hippochan's FMRankCalc). Final 6 win rate
 
 Thanks to Hippochan, Exarion and lukadev for the information they shared.
 
+Thanks to the players who tried the tool and sent feedback: AEtienne.
+
 License: MIT.

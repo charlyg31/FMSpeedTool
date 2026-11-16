@@ -92,6 +92,10 @@ def test_f6_matches_excel():
     # 3 equipements ou plus passe par COMBIN (absent de la bibliotheque, ajoute a la main)
     r = calc.compute(dict(deck, mm=2), True, ["Bright Castle", "Dragon Treasure"] * 3)
     assert 0 < r["Final 6"] < 1
+    # Cle de RECHERCHEV qui tombe entre deux flottants (6 x 0,1) : Excel la trouve, nous aussi.
+    for thunders in range(13):
+        r = calc.compute(dict(dragonsUnder1600=1, dragons1600Plus=1, thunders=thunders), False, ["Beast Fangs"])
+        assert 0 <= r["Final 6"] < 1, thunders
 
 
 def test_deck_screen_reading():

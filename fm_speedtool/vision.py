@@ -662,6 +662,13 @@ def battle_cards(img):
     return sides
 
 
+def card_flash(img, side="left"):
+    """Illustration de la carte de combat blanchie par le flash d'une destruction."""
+    x = BATTLE_ART_X[0 if side == "left" else 1]
+    art = img[ART_Y:ART_Y + ART_SIZE, x:x + ART_SIZE]
+    return float((art.min(axis=2) > 210).mean()) > 0.2
+
+
 def card_in_defense(img, side):
     """Le texte de la stat active est noir : DFD plus sombre que ATK = defense."""
     x = BATTLE_ART_X[0 if side == "left" else 1]
