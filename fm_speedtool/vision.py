@@ -112,8 +112,16 @@ class Framing:
     # Reperes du calage complet : coin haut gauche a leur place attendue.
     SCREENS = (
         ("title", (("title_ref_a.png", (30, 215)), ("title_ref_b.png", (515, 235)),
-                   ("title_ref_c.png", (120, 416)), ("title_ref_d.png", (10, 12)))),
-        ("deck", (("deck_ref_a.png", (132, 20)), ("deck_ref_b.png", (486, 10)), ("deck_ref_c.png", (130, 449)))),
+                   ("title_ref_c.png", (120, 416)), ("title_ref_d.png", (10, 12)),
+                   ("title_ref_e.png", (430, 412)), ("title_ref_f.png", (540, 20)), ("title_ref_g.png", (500, 130)))),
+        # Reperes repartis sur tout l'ecran : il en reste au moins trois si l'image deborde.
+        # "y" : bas du cadre, un trait horizontal (sa position en largeur ne veut rien dire) ;
+        # "fin" : repere qui se repete ailleurs (coin, croisements de la grille), seulement
+        # pour la verification a +-3 px.
+        ("deck", (("deck_ref_a.png", (132, 20)), ("deck_ref_b.png", (486, 10)), ("deck_ref_c.png", (130, 449), "y"),
+                  ("deck_ref_d.png", (4, 8)), ("deck_ref_e.png", (1, 124)), ("deck_ref_f.png", (1, 366)),
+                  ("deck_ref_g.png", (570, 420), "fin"), ("deck_ref_h.png", (380, 252), "fin"),
+                  ("deck_ref_i.png", (467, 393), "fin"), ("deck_ref_j.png", (580, 110), "fin"))),
     )
     DECK_OFF = 64                                                   # recherche a +-64 px
     MIN_REF = 0.7                                                   # repere retenu pour l'ajustement
@@ -121,12 +129,21 @@ class Framing:
     GOOD = 0.85                                                     # correlation minimale
     SURE = 0.93                                                     # une seule mesure suffit
     DECK_SURE = 0.95
-    DEAD_ZONE = 2.5         # correction plus petite (coins) : image laissee telle quelle
+    DEAD_ZONE = 0.4         # correction plus petite (coins) : image laissee telle quelle
     # Image tres etiree : reperes cherches aussi a ces echelles (largeur, hauteur), les plus
     # proches de 1 d'abord. Une seule par mesure en plus de 1 x 1 (~7 ms chacune).
     PAIRS = sorted(((a, b) for a in (1.0, 0.94, 1.06, 0.88, 1.12) for b in (1.0, 0.94, 1.06, 0.88, 1.12)),
                    key=lambda p: abs(p[0] - 1) + abs(p[1] - 1))
     VOTES = 3
+    # Alignement fin (sous-pixel) de toute l'image sur une capture de reference de l'ecran,
+    # parties mobiles masquees (menu surligne, contenu de la liste du deck).
+    # Masque (<nom>_mask.png) : blanc = pixels fixes de l'ecran. Ecran titre : tout sauf le
+    # menu ; ecran du deck : cadres, grille de la liste, en-tete et sable (pas le contenu
+    # des cases ni les compteurs).
+    FULL = {"title": "title_full.png", "deck": "deck_full.png"}
+    ECC_MIN = 0.6           # alignement fin : correlation minimale (verifie ensuite par les reperes)
+    ECC_SURE = 0.93         # reperes tres nets apres alignement : une seule mesure suffit
+    SHEAR_MAX = 0.005       # image ni tournee ni penchee
 
     def __init__(self, ref_path, dy=0.0, sy=1.0, locked=False, dx=0.0, sx=1.0, full=False,
                  vertical=True):
@@ -140,13 +157,19 @@ class Framing:
         self.screens = []
         for screen, names in self.SCREENS:
             refs = []
-            for name, (x, y) in names:
+            for name, (x, y), *use in names:
                 ref = cv2.imread(os.path.join(folder, name), cv2.IMREAD_GRAYSCALE)
                 if ref is not None:
-                    refs.append(((x, y), ref.astype(np.float32)))
+                    refs.append(((x, y), ref.astype(np.float32), use[0] if use else "xy"))
             if len(refs) == len(names):
                 self.screens.append((screen, refs))
         self.ref = self.refs[0][1] if self.refs else None
+        self.full_refs = {}
+        for screen, name in self.FULL.items():
+            ref = cv2.imread(os.path.join(folder, name), cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(os.path.join(folder, name.replace(".png", "_mask.png")), cv2.IMREAD_GRAYSCALE)
+            if ref is not None and mask is not None and ref.shape == mask.shape == (H, W):
+                self.full_refs[screen] = (ref.astype(np.float32), mask)
         self.dx, self.dy, self.sx, self.sy = float(dx), float(dy), float(sx), float(sy)
         self.full = bool(full) and bool(locked) and bool(self.screens)
         self.locked = bool(locked) and bool(self.refs or self.full)
@@ -207,11 +230,22 @@ class Framing:
             return 0.0, x, y
         r = cv2.matchTemplate(win, ref, cv2.TM_CCOEFF_NORMED)
         _, m, _, loc = cv2.minMaxLoc(r)
-        return float(m), x - off + loc[0], y - off + loc[1]
+        fx, fy = float(loc[0]), float(loc[1])
+        # Sommet de la correlation au sous-pixel (parabole sur les voisins).
+        cx, cy = loc
+        if 0 < cx < r.shape[1] - 1:
+            a, b, c = r[cy, cx - 1], r[cy, cx], r[cy, cx + 1]
+            if a - 2 * b + c < 0:
+                fx += 0.5 * (a - c) / (a - 2 * b + c)
+        if 0 < cy < r.shape[0] - 1:
+            a, b, c = r[cy - 1, cx], r[cy, cx], r[cy + 1, cx]
+            if a - 2 * b + c < 0:
+                fy += 0.5 * (a - c) / (a - 2 * b + c)
+        return float(m), x - off + fx, y - off + fy
 
     def _found(self, refs, gray, sx, sy, off):
         found = []
-        for (x, y), ref in refs:
+        for (x, y), ref, *_ in refs:
             if (sx, sy) != (1.0, 1.0):
                 h, w = ref.shape
                 ref = cv2.resize(ref, (max(8, int(round(w / sx))), max(8, int(round(h / sy)))),
@@ -226,6 +260,7 @@ class Framing:
         return sorted(f[0] for f in found)[-3]
 
     def _measure_screen(self, refs, gray0, pairs):
+        refs = [r for r in refs if r[2] != "fin"]      # recherche large : reperes uniques
         t = (0.0, 0.0, 1.0, 1.0)
         score = 0.0
         for off in (self.DECK_OFF, 6, 3):
@@ -243,15 +278,15 @@ class Framing:
                 gray = cv2.warpAffine(gray0, np.float32([[sx, 0, dx], [0, sy, dy]]), (W, H),
                                       flags=cv2.INTER_LINEAR)
                 found = self._found(refs, gray, 1.0, 1.0, off)
-            used = [(p, f) for (p, _), f in zip(refs, found) if f[0] >= self.MIN_REF]
+            used = [(p, f, u) for (p, _, u), f in zip(refs, found) if f[0] >= self.MIN_REF]
             if len(used) < 3:
                 return None
-            score = float(np.mean([f[0] for _, f in used]))   # chacun >= MIN_REF
-            fx = np.array([f[1] for _, f in used], np.float64)
-            fy = np.array([f[2] for _, f in used], np.float64)
-            rx = np.array([p[0] for p, _ in used], np.float64)
-            ry = np.array([p[1] for p, _ in used], np.float64)
-            if np.ptp(fx) < 250 or np.ptp(fy) < 180:
+            score = float(np.mean([f[0] for _, f, _ in used]))   # chacun >= MIN_REF
+            fx = np.array([f[1] for _, f, u in used if u == "xy"], np.float64)
+            rx = np.array([p[0] for p, _, u in used if u == "xy"], np.float64)
+            fy = np.array([f[2] for _, f, _ in used], np.float64)
+            ry = np.array([p[1] for p, _, _ in used], np.float64)
+            if len(fx) < 2 or np.ptp(fx) < 250 or np.ptp(fy) < 180:
                 return None
             # Correction de l'image deja corrigee : u -> k * u + e (moindres carres).
             kx, ex = np.polyfit(fx, rx, 1)
@@ -263,7 +298,7 @@ class Framing:
             return None
         return score, round(dx, 1), round(dy, 1), round(sx, 4), round(sy, 4), pair
 
-    def measure_full(self, img, pairs=None):
+    def measure_full(self, img, pairs=None, fine=True):
         """(score, dx, dy, sx, sy) qui ramenent les reperes de l'ecran titre ou de l'ecran
         du deck a leur place, ou None. Puis deux passes sur l'image deja corrigee, pour affiner.
         pairs : echelles essayees pour la premiere recherche (toutes par defaut)."""
@@ -271,14 +306,94 @@ class Framing:
             return None
         gray0 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
         best = None
-        for _, refs in self.screens:
+        for screen, refs in self.screens:
             m = self._measure_screen(refs, gray0, self.PAIRS if pairs is None else pairs)
             if m is not None and (best is None or m[0] > best[0]):
-                best = m
+                best, where = m, screen
         if best is None:
             return None
         self.last_pair = best[5]
-        return best[:5]
+        if not fine:
+            return best[:5]
+        fine = self._refine(gray0, where, best[1:5])
+        # Sans alignement fin reussi (reference absente : mesure grossiere seule).
+        if fine is None:
+            return None if where in self.full_refs else best[:5]
+        return fine
+
+    # --- alignement fin (sous-pixel) ------------------------------------------------
+
+    @staticmethod
+    def _ecc(ref, obs, mask, warp, iters):
+        """Alignement ECC (reference -> image observee), zones de la reference qui
+        tombent hors de l'image ignorees."""
+        h, w = obs.shape
+        inside = cv2.warpAffine(np.full((h, w), 255, np.uint8), cv2.invertAffineTransform(warp),
+                                (ref.shape[1], ref.shape[0]), flags=cv2.INTER_NEAREST, borderValue=0)
+        m = cv2.bitwise_and(mask, cv2.erode(inside, np.ones((5, 5), np.uint8)))
+        # Contenu absent de l'image (bandes noires quand l'image deborde ou retrecit) :
+        # reference claire qui tombe sur du noir complet, ignoree.
+        seen = cv2.warpAffine(obs, warp, (ref.shape[1], ref.shape[0]),
+                              flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderValue=0)
+        gone = ((seen < 8) & (ref > 30)).astype(np.uint8)
+        m[cv2.dilate(gone, np.ones((7, 7), np.uint8)) > 0] = 0
+        crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, iters, 1e-5)
+        return cv2.findTransformECC(ref, obs, warp, cv2.MOTION_AFFINE, crit, m, 5)
+
+    def _refine(self, gray0, screen, guess):
+        """(correlation, dx, dy, sx, sy) au dixieme de pixel pres, a partir de la mesure
+        grossiere guess (dx, dy, sx, sy) ; None si l'alignement n'est pas sur."""
+        if screen not in self.full_refs:
+            return None
+        ref, mask = self.full_refs[screen]
+        dx, dy, sx, sy = guess
+        warp = np.float32([[1 / sx, 0, -dx / sx], [0, 1 / sy, -dy / sy]])
+        try:
+            if abs(sx - 1) + abs(sy - 1) > 0.002 or abs(dx) + abs(dy) > 3:
+                # Loin du reglage : d'abord en demi-resolution (plus large bassin).
+                half = (W // 2, H // 2)
+                w2 = warp.copy()
+                w2[:, 2] /= 2
+                _, w2 = self._ecc(cv2.resize(ref, half, interpolation=cv2.INTER_AREA),
+                                  cv2.resize(gray0, half, interpolation=cv2.INTER_AREA),
+                                  cv2.resize(mask, half, interpolation=cv2.INTER_NEAREST), w2, 50)
+                w2[:, 2] *= 2
+                warp = w2
+            cc, warp = self._ecc(ref, gray0, mask, warp, 60)
+            cc, warp = self._ecc(ref, gray0, mask, warp, 60)   # masque refait au bon reglage
+        except cv2.error:
+            return None
+        if cc < self.ECC_MIN or max(abs(warp[0, 1]), abs(warp[1, 0])) > self.SHEAR_MAX:
+            return None
+        sx, sy = 1 / float(warp[0, 0]), 1 / float(warp[1, 1])
+        dx, dy = -float(warp[0, 2]) * sx, -float(warp[1, 2]) * sy
+        lo, hi = self.SCALE_LIMIT
+        if not (lo <= sx <= hi and lo <= sy <= hi):
+            return None
+        # Verification independante : sur l'image corrigee, les reperes fixes de l'ecran
+        # (au moins trois) sont a moins d'un pixel de leur place. Le score de l'alignement
+        # seul baisse des que l'image deborde (bandes noires), meme bien alignee.
+        refs = dict(self.screens).get(screen, [])
+        for last in (False, True):
+            fixed = cv2.warpAffine(gray0, np.float32([[sx, 0, dx], [0, sy, dy]]), (W, H), flags=cv2.INTER_LINEAR)
+            # Reperes nets et a moins d'un pixel de leur place ; un repere coupe par le bord
+            # de l'image (trouve ailleurs) est ecarte. Il en faut trois, bien repartis.
+            found = [(f, p, u) for (p, _, u), f in zip(refs, self._found(refs, fixed, 1.0, 1.0, 3))
+                     if f[0] >= self.MIN_REF and abs(f[2] - p[1]) <= 1 and (u == "y" or abs(f[1] - p[0]) <= 1)]
+            xs = [(f, p) for f, p, u in found if u != "y"]
+            if (len(found) < 3 or len(xs) < 2 or np.ptp([f[1] for f, _ in xs]) < 250
+                    or np.ptp([f[2] for f, _, _ in found]) < 180):
+                return None
+            if last:
+                break
+            # Derniere retouche : reperes au sous-pixel (moindres carres), puis controle.
+            fx = np.array([f[1] for f, _ in xs]); rx = np.array([p[0] for _, p in xs], float)
+            fy = np.array([f[2] for f, _, _ in found]); ry = np.array([p[1] for _, p, _ in found], float)
+            kx, ex = np.polyfit(fx, rx, 1)
+            ky, ey = np.polyfit(fy, ry, 1)
+            dx, dy, sx, sy = kx * dx + ex, ky * dy + ey, kx * sx, ky * sy
+        score = float(np.mean([f[0] for f, _, _ in found]))
+        return score, round(float(dx), 2), round(float(dy), 2), round(float(sx), 5), round(float(sy), 5)
 
     # --- PS2 : calage vertical (panneau LP / menu titre) ----------------------------
 
@@ -317,22 +432,28 @@ class Framing:
                 pairs.append(self.pair_hit)
             pairs.append(self.PAIRS[self.pair_next])
             self.pair_next = self.pair_next % (len(self.PAIRS) - 1) + 1
+        if self.full:
+            # Surveillance : mesure rapide d'abord ; l'alignement fin (plus long) seulement
+            # si elle voit le cadrage bouger de plus d'un pixel.
+            m = self.measure_full(img, pairs, fine=False)
+            if m is None or m[0] < self.GOOD or not self.differs(m, 1.0):
+                return False
         m = self.measure_full(img, pairs)
         if m is not None and m[0] >= self.GOOD:
             self.pair_hit = self.last_pair
-            key = tuple(int(round(v)) for v in (m[1], m[2], m[3] * 640, m[4] * 512))
-            close = [k for k in self.full_votes if max(abs(a - b) for a, b in zip(k, key)) <= 1]
+            key = (m[1], m[2], m[3] * W, m[4] * H)
+            close = [k for k in self.full_votes if max(abs(a - b) for a, b in zip(k, key)) <= 0.5]
             self.full_votes = (close + [key])[-self.VOTES:]
             # Premier calage : deux mesures concordantes (l'ecran titre passe vite) ;
             # deja cale : trois, pour ne pas suivre une mesure isolee.
             need = self.VOTES if self.full else 2
-            sure = len(self.full_votes) >= need or (m[0] >= self.DECK_SURE and not self.full)
+            sure = len(self.full_votes) >= need or (m[0] >= self.ECC_SURE and not self.full)
             if sure:
                 # Decalage de 2 px ou moins : les lectures le tolerent deja (+-2 px), et
                 # corriger ne ferait que retoucher l'image d'un reglage qui marche.
                 if self._shift(m) <= self.DEAD_ZONE:
                     m = (m[0], 0.0, 0.0, 1.0, 1.0)
-            if sure and (not self.full or self.differs(m)):
+            if sure and (not self.full or self.differs(m, 0.4)):
                 self.dx, self.dy, self.sx, self.sy = m[1], m[2], m[3], m[4]
                 self.score, self.locked, self.full = m[0], True, True
                 self.full_votes = []
@@ -686,8 +807,11 @@ def _frame_colors(region):
 
 
 def trap_card_right(img):
-    """En combat, la carte de droite est un piege (cadre magenta)."""
-    return _frame_colors(img[40:470, 345:620])[1] > 0.2
+    """En combat, la carte de droite est un piege (cadre magenta). Le bandeau du nom
+    doit etre magenta lui aussi : une illustration violette (Fire Reaper) qui s'illumine
+    pendant le coup depasse le seuil sur la carte entiere, jamais sur le bandeau."""
+    return (_frame_colors(img[40:470, 345:620])[1] > 0.2
+            and _frame_colors(img[48:80, 365:600])[1] > 0.6)
 
 
 def magic_card_shown(img):
@@ -728,25 +852,55 @@ def card_burning(img, side):
     return float(fire.mean()) > 0.10
 
 
+# Panneau eteint (joueur pas actif) : bleu 65 a 99, rouge 80 a 82 selon la source
+# (ePSXe, stream, PS2). Les seuils de couleur seuls (90 / 80) tombent pile sur ces
+# valeurs : un demi-pixel de cadrage suffit a faire disparaitre le HUD. Plus bas, un
+# terrain violet (DARK) passe pour les panneaux : un seuil bas n'est donc admis que si
+# la forme des etiquettes COM / YOU est reconnue.
+PANEL_MIN = 55
+_HUD_LABELS = None
+
+
 def hud_panels(img):
     """Panneaux COM (bleu) et YOU (rouge) visibles, sans regarder l'encadre FIELD."""
     return _panel_strength(img, COM_PANEL, 0) > 90 and _panel_strength(img, YOU_PANEL, 2) > 80
 
 
-def hud_present(img):
-    """Le panneau LP/cartes du duel est-il a l'ecran ?"""
-    blue = _panel_strength(img, COM_PANEL, 0)
-    red = _panel_strength(img, YOU_PANEL, 2)
-    if not (blue > 90 and red > 80):
+def hud_labels(img, pad=5):
+    """Forme des etiquettes COM / YOU (lettres et cadres blancs), panneaux eclaires ou non :
+    >= 0,85 HUD a sa place, <= 0,3 sinon (sur 7 videos)."""
+    global _HUD_LABELS
+    if _HUD_LABELS is None:
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        ref = cv2.imread(os.path.join(base, "assets", "hud_labels.png"), cv2.IMREAD_GRAYSCALE)
+        _HUD_LABELS = ref.astype(np.float32) if ref is not None else False
+    if _HUD_LABELS is False:
+        return 0.0
+    reg = img[42 - pad:92 + pad, 494 - pad:552 + pad].min(axis=2).astype(np.float32)
+    return float(cv2.matchTemplate(reg, _HUD_LABELS, cv2.TM_CCOEFF_NORMED).max())
+
+
+def hud_solid(img):
+    """HUD net : panneaux bien colores et encadre FIELD visible. C'est seulement sur
+    un tel HUD que les chiffres sont appris (une image en fondu en apprendrait de faux)."""
+    if not hud_panels(img):
         return False
     # Encadre "FIELD" bleu marine en haut a gauche (absent des decors bleu/rouge).
     box = img[40:92, 28:132].astype(int)
     navy = ((box[..., 0] > box[..., 2] + 30) & (box[..., 0] > box[..., 1] + 15)).mean()
-    if navy <= 0.25:     # ~0.8 sans terrain, ~0.43 avec "FIELD MOUNTAIN", 0,25-0,35 en stream / PS2
-        return False
     # Peu de bleu marine : il faut aussi le texte blanc "FIELD" (~4 %). Le film d'intro
     # (oeil bleu et orange, joue au demarrage et sur l'ecran titre inactif) n'en a pas.
-    return navy > 0.5 or (box.min(axis=2) > 170).mean() > 0.005
+    return navy > 0.25 and (navy > 0.5 or (box.min(axis=2) > 170).mean() > 0.005)
+
+
+def hud_present(img):
+    """Le panneau LP/cartes du duel est-il a l'ecran ?"""
+    if hud_solid(img):
+        return True
+    # Panneau eteint un peu sombre, encadre FIELD avec un nom de terrain (FOREST, DARK...)
+    # ou blanchi par un flash : il faut les etiquettes COM / YOU bien reconnues.
+    return (_panel_strength(img, COM_PANEL, 0) > PANEL_MIN and _panel_strength(img, YOU_PANEL, 2) > PANEL_MIN
+            and hud_labels(img) >= 0.8)
 
 
 def active_player(img):

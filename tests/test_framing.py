@@ -55,9 +55,9 @@ def test_image_decalee_recalee(warp):
     assert _calibrate(fr, moved)
     dx, dy, sx, sy = warp
     for p in (0, 640):
-        assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 1.5
+        assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 0.5
     for p in (0, 512):
-        assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 1.5
+        assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 0.5
     # Les lignes du deck se relisent comme sur l'image d'origine (au-dela de 6 %, la double
     # mise a l'echelle du test floute trop les chiffres).
     if max(abs(sx - 1), abs(sy - 1)) <= 0.06:
@@ -84,9 +84,9 @@ def test_ecran_titre_recale(warp):
     assert _calibrate(fr, moved)
     dx, dy, sx, sy = warp
     for p in (0, 640):
-        assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 1.5
+        assert abs(fr.sx * (sx * p + dx) + fr.dx - p) < 0.5
     for p in (0, 512):
-        assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 1.5
+        assert abs(fr.sy * (sy * p + dy) + fr.dy - p) < 0.5
 
 
 def test_rien_hors_titre_et_deck():
@@ -104,7 +104,8 @@ def test_surveillance_suit_un_changement():
     moved = _warp(img, 6, 0, 1, 1)
     results = [fr.calibrate(moved) for _ in range(fr.VOTES)]
     assert results[-1] and not any(results[:-1])
-    assert fr.dx == -6.0
+    for p in (0, 640):                     # au demi-pixel pres
+        assert abs(fr.sx * (p + 6) + fr.dx - p) < 0.5
     assert not fr.calibrate(moved)
 
 

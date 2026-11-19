@@ -85,6 +85,7 @@ class Tracker:
         self.stats["lp"] = 8000
         self.hud = {"com_lp": None, "you_lp": None, "com_deck": None, "you_deck": None}
         self.prev_values = dict(self.hud)
+        self.prev_solid = False
         self.active = None
         self.hud_frames = 0
         self.hud_last_seen = 0.0
@@ -334,6 +335,7 @@ class Tracker:
                 return
             self._start_duel(img, now)
         active = vision.active_player(img)
+        solid = vision.hud_solid(img)
         values = {k: self.digits.read(img, k) for k in vision.HUD_CELLS}
         if active and self.active and active != self.active:
             # Au changement de joueur, les LP et le paquet de celui qui finit son
@@ -343,7 +345,9 @@ class Tracker:
             drawing = f"{active}_deck"
             known = {k: v for k, v in self.prev_values.items()
                      if v is not None and values[k] is None and k != drawing}
-            if known and self.digits.bootstrap(img, known):
+            # Seulement entre deux images de HUD net : une image en fondu, mal lue,
+            # ferait apprendre de faux chiffres.
+            if known and solid and self.prev_solid and self.digits.bootstrap(img, known):
                 values = {k: self.digits.read(img, k) for k in vision.HUD_CELLS}
             # Le jeu compte les tours termines : verifie sur la video (3 tours
             # affiches pour un duel gagne pendant ton 4e tour).
@@ -352,6 +356,7 @@ class Tracker:
         if active:
             self.active = active
         self.prev_values = values
+        self.prev_solid = solid
         for k, v in values.items():
             if v is None:
                 continue
