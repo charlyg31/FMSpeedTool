@@ -52,6 +52,19 @@
   "pad": 6
  },
  {
+  "name": "Ecran Free Duel (LOSS)",
+  "action": "free_duel",
+  "rect": [
+   460,
+   431,
+   72,
+   24
+  ],
+  "file": "t04_free_duel.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
   "name": "YOU WIN!",
   "action": "you_win",
   "rect": [
@@ -60,7 +73,7 @@
    280,
    190
   ],
-  "file": "t04_you_win.png",
+  "file": "t05_you_win.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -73,7 +86,7 @@
    330,
    200
   ],
-  "file": "t05_you_lose.png",
+  "file": "t06_you_lose.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -86,25 +99,12 @@
    230,
    34
   ],
-  "file": "t06_opponent.png",
-  "threshold": 0.85,
-  "pad": 6
- },
- {
-  "name": "Pegasus",
-  "action": "opponent",
-  "rect": [
-   25,
-   428,
-   230,
-   34
-  ],
   "file": "t07_opponent.png",
   "threshold": 0.85,
   "pad": 6
  },
  {
-  "name": "Isis",
+  "name": "Pegasus",
   "action": "opponent",
   "rect": [
    25,
@@ -117,6 +117,19 @@
   "pad": 6
  },
  {
+  "name": "Isis",
+  "action": "opponent",
+  "rect": [
+   25,
+   428,
+   230,
+   34
+  ],
+  "file": "t09_opponent.png",
+  "threshold": 0.85,
+  "pad": 6
+ },
+ {
   "name": "Pegasus",
   "action": "opponent",
   "rect": [
@@ -125,7 +138,7 @@
    150,
    200
   ],
-  "file": "t09_opponent.png",
+  "file": "t10_opponent.png",
   "threshold": 0.85,
   "pad": 90
  },
@@ -138,7 +151,7 @@
    375,
    46
   ],
-  "file": "t10_results.png",
+  "file": "t11_results.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -151,7 +164,7 @@
    65,
    28
   ],
-  "file": "t11_winner_com.png",
+  "file": "t12_winner_com.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -164,7 +177,7 @@
    65,
    28
   ],
-  "file": "t12_winner_you.png",
+  "file": "t13_winner_you.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -177,7 +190,7 @@
    165,
    120
   ],
-  "file": "t13_game_menu.png",
+  "file": "t14_game_menu.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -190,7 +203,7 @@
    125,
    48
   ],
-  "file": "t14_deck_screen.png",
+  "file": "t15_deck_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -203,7 +216,7 @@
    135,
    40
   ],
-  "file": "t15_chest_screen.png",
+  "file": "t16_chest_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -216,7 +229,7 @@
    250,
    36
   ],
-  "file": "t16_password_screen.png",
+  "file": "t17_password_screen.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -229,7 +242,7 @@
    72,
    28
   ],
-  "file": "t17_save_done.png",
+  "file": "t18_save_done.png",
   "threshold": 0.85,
   "pad": 6
  },
@@ -242,7 +255,7 @@
    72,
    28
   ],
-  "file": "t18_load_done.png",
+  "file": "t19_load_done.png",
   "threshold": 0.85,
   "pad": 6
  }

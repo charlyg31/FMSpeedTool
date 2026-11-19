@@ -50,7 +50,8 @@ que le jeu, sans incrustation par-dessus.
 | Free Duel | Écran « FREE DUEL / SELECT OPPONENT » : aucun split par duel |
 | Free Duel / farm | Aucun split (option « Split fin de farm » désactivée par défaut) |
 | LOAD d'une save | SAVE COMPLETE! retient combien de splits sont faits ; LOAD COMPLETE! (après une mort par exemple) ramène la run à cette save. Option 1 (par défaut) : annuler dans LiveSplit les splits faits depuis la save. Option 2 : ne pas compter les splits des duels rejoués |
-| Adversaire | Nom sur l'écran Free Duel, ou portrait dans le dialogue (Pegasus, Isis, Duel Master K) |
+| Adversaire | Les 39 adversaires : nom écrit sur l'écran Free Duel (lu lettre par lettre), ou portrait du dialogue juste avant un duel de campagne. Vérifié sur deux runs All Duelists (YouTube et Twitch, deux joueurs) : chaque duel a le bon adversaire |
+| All Duelists | Option « All Duelists (DMK + Heishin en Free Duel) » (désactivée par défaut) : la 1re victoire en Free Duel contre Duel Master K et la 1re contre Heishin (Heishin 1, perdu en campagne) splittent comme des victoires de campagne au lieu de compter comme du farm |
 | Objectif A-TEC | Choisi tout seul contre Pegasus |
 
 ### Notes du duel en direct
@@ -69,7 +70,7 @@ que le jeu, sans incrustation par-dessus.
 Le score (52 + points, borné à 0..99) et la bande (S-TEC à S-POW) se mettent à jour en direct.
 Les boutons +/- corrigent une détection ratée (marquée d'un *).
 
-Un historique sur la page donne le rang final de chaque duel de la run (campagne et Free Duel).
+Un historique sur la page donne le rang final de chaque duel de la run (campagne et Free Duel), avec son adversaire.
 
 ## Validé sur la vidéo du 20/10/2026
 

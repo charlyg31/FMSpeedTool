@@ -21,6 +21,8 @@ SPECS = [
     ("title1", "Titre : NEW GAME surligne", "title_newgame", (215, 62, 210, 66)),
     ("video/v000276", "Titre : NEW GAME surligne (video)", "title_newgame", (215, 62, 210, 66)),
     ("video/v001060", "Ecran Free Duel", "free_duel", (170, 25, 300, 35)),
+    # "LOSS" de la barre du bas : le titre FREE DUEL peut etre cache par un bandeau de stream.
+    ("video/v001060", "Ecran Free Duel (LOSS)", "free_duel", (460, 431, 72, 24)),
     ("video/v001528", "YOU WIN!", "you_win", (170, 80, 280, 190)),
     ("video/v002340", "YOU LOSE", "you_lose", (150, 80, 330, 200)),
     ("video/v001060", "Duel Master K", "opponent", (25, 428, 230, 34)),

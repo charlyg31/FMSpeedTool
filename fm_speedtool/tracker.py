@@ -5,9 +5,12 @@ gabarits integres (titre, Free Duel, YOU WIN / YOU LOSE, adversaires, pose
 face cachee, SAVE / LOAD COMPLETE...).
 """
 
+import os
+import sys
 import time
 
 import fmlogic
+import opponents
 import vision
 from i18n import N_, _
 
@@ -27,9 +30,13 @@ ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de val
 FACE_UP_BACK = 0.45      # score du dos de carte sous lequel la carte est face visible (0,25-0,31)
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
 DECK_FRAMING_WAIT = 1.0  # ecran du deck pas encore cale : lecture retenue au plus aussi longtemps
+PORTRAIT_VALID = 600.0  # portrait de campagne vu au plus tot aussi longtemps avant le duel (deck refait entre)
+PORTRAIT_AFTER = 60.0   # portrait du vaincu dans le dialogue d'apres-duel : ignore aussi longtemps
 PLACE_CANCEL = 1.0       # choix de la case annule : l'ecran d'orientation revient dans ce delai (~0,3 s)
 # Types de split (transmis au script LiveSplit, qui filtre selon ses reglages)
 SPLIT_WIN, SPLIT_FIRST_LOSS, SPLIT_FARM, SPLIT_OTHER = 1, 2, 3, 4
+# All Duelists : adversaires battus en Free Duel dans la route (1re victoire = split)
+ALL_DUELISTS_FREE = ("Duel Master K", "Heishin")
 
 
 class Tracker:
@@ -43,8 +50,13 @@ class Tracker:
                         "split_farm_v2": False,
                         # Chargement d'une sauvegarde : "undo" annule dans LiveSplit les splits
                         # faits depuis cette sauvegarde ; "skip" ignore les N prochains.
-                        "load_mode": "undo"}
+                        "load_mode": "undo",
+                        # All Duelists : 1re victoire en Free Duel contre DMK et contre Heishin
+                        # (Heishin 1, perdu en campagne) : split comme une victoire de campagne.
+                        "all_duelists": False}
         self.edges = {}
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        self.name_reader, self.portraits = opponents.load(os.path.join(base, "assets"))
         self.last_split = (SPLIT_OTHER, "")
         self.area = vision.GameArea()     # zone de jeu dans la fenetre (bandes noires)
         self.on_password_screen = False   # ecran PASSWORD du jeu affiche
@@ -78,6 +90,8 @@ class Tracker:
         self.free_pending = False         # ecran Free Duel vu depuis le dernier duel
         self.opponent = ""
         self.next_opponent = ""
+        self.portrait = None              # (adversaire, instant) : dernier portrait de campagne vu
+        self.free_counted = set()         # All Duelists : adversaires de Free Duel deja battus
         self.reset_duel()
 
     def reset_duel(self):
@@ -164,8 +178,20 @@ class Tracker:
         # Apres un duel, le portrait du vaincu revient dans le dialogue : on
         # l'ignore 20 s (sauf sur l'ecran Free Duel, ou le nom choisi compte).
         after_duel = now - self.duel_ended_at < POST_DUEL_IGNORE
-        if "opponent" in matches and not self.in_duel and (self.free_pending or not after_duel):
+        name = None
+        if self.in_duel:
+            pass
+        elif "free_duel" in matches and self.name_reader is not None:
+            # Ecran Free Duel : nom ecrit sous les portraits (celui du curseur).
+            name = self.name_reader.read(img)
+        elif not self.free_pending and self.portraits is not None:
+            # Campagne : portrait du dialogue avant le duel (le dernier vu compte).
+            who = self.portraits.identify(img)
+            if who is not None and not (who == self.opponent and now - self.duel_ended_at < PORTRAIT_AFTER):
+                self.portrait = (who, now)
+        if name is None and "opponent" in matches and not self.in_duel and (self.free_pending or not after_duel):
             name = matches["opponent"].name
+        if name is not None:
             if name != self.next_opponent:
                 self.next_opponent = name
                 self.on_event("info", _("Adversaire choisi : {name}", name=name))
@@ -322,8 +348,20 @@ class Tracker:
             self.deck.reset()             # nouveau deck de depart
         self.on_event("new_run", _("Nouvelle partie ({why})", why=why))
 
+    def _new_duel_hud(self, img):
+        """HUD revenu apres une longue absence : nouveau duel, ou suite du meme (une suite
+        de combats peut cacher le HUD plus de 8 s, verifie sur un stream) ? Le meme duel
+        continue seulement si son resultat est inconnu et que les LP lus ne sont pas ceux
+        d'un debut de duel (8000 / 8000)."""
+        if self.decided:
+            return True
+        com, you = self.digits.read(img, "com_lp"), self.digits.read(img, "you_lp")
+        if com is None and you is None:
+            return True
+        return com == 8000 and you == 8000
+
     def _hud_frame(self, img, now):
-        if self.in_duel and now - self.hud_last_seen > DUEL_GONE_SECONDS:
+        if self.in_duel and now - self.hud_last_seen > DUEL_GONE_SECONDS and self._new_duel_hud(img):
             # Duel en attente de son resultat, mais un nouveau duel commence (sauvegarde
             # rechargee, reset) : on ferme l'ancien.
             self._end_duel(self.decided, now)
@@ -384,7 +422,11 @@ class Tracker:
         self.free_duel = self.free_pending
         self.free_pending = False
         self.opponent = self.next_opponent
+        if not self.free_duel and self.portrait and now - self.portrait[1] < PORTRAIT_VALID:
+            self.opponent = self.portrait[0]
+        self.opponent = opponents.display_name(self.opponent)
         self.next_opponent = ""
+        self.portrait = None
         self.active = vision.active_player(img)
         mode = "Free Duel" if self.free_duel else _("Campagne")
         who = _(" contre {name}", name=self.opponent) if self.opponent else ""
@@ -417,7 +459,14 @@ class Tracker:
                              "stats": s})
         if result == "win":
             self.wins += 1
-            if free:
+            if (free and self.options.get("all_duelists") and self.opponent in ALL_DUELISTS_FREE
+                    and self.opponent not in self.free_counted):
+                # All Duelists : DMK et Heishin 1 se battent en Free Duel, 1re victoire = split.
+                self.free_counted.add(self.opponent)
+                self.on_event("info", _("Victoire en Free Duel{who} (All Duelists, compte) - {summary}",
+                                        who=who, summary=summary))
+                self.pending_split = (_("Split : victoire{who}", who=who), now + 10, SPLIT_WIN, self.opponent)
+            elif free:
                 self.free_wins += 1
                 self.on_event("info", _("Victoire en Free Duel{who} - {summary}", who=who, summary=summary))
             else:

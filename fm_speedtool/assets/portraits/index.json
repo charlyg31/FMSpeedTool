@@ -1,0 +1,192 @@
+[
+ {
+  "name": "Simon Muran",
+  "file": "p00.png",
+  "frame": 941
+ },
+ {
+  "name": "Teana",
+  "file": "p01.png",
+  "frame": 1336
+ },
+ {
+  "name": "Villager 1",
+  "file": "p02.png",
+  "frame": 1778
+ },
+ {
+  "name": "Villager 2",
+  "file": "p03.png",
+  "frame": 2176
+ },
+ {
+  "name": "Villager 3",
+  "file": "p04.png",
+  "frame": 2672
+ },
+ {
+  "name": "Jono",
+  "file": "p05.png",
+  "frame": 3264
+ },
+ {
+  "name": "Seto",
+  "file": "p06.png",
+  "frame": 3677
+ },
+ {
+  "name": "Heishin",
+  "file": "p07.png",
+  "frame": 4405
+ },
+ {
+  "name": "Rex Raptor",
+  "file": "p08.png",
+  "frame": 4889
+ },
+ {
+  "name": "Weevil Underwood",
+  "file": "p09.png",
+  "frame": 5339
+ },
+ {
+  "name": "Mai Valentine",
+  "file": "p10.png",
+  "frame": 5777
+ },
+ {
+  "name": "Bandit Keith",
+  "file": "p11.png",
+  "frame": 6201
+ },
+ {
+  "name": "Shadi",
+  "file": "p12.png",
+  "frame": 6930
+ },
+ {
+  "name": "Yami Bakura",
+  "file": "p13.png",
+  "frame": 7436
+ },
+ {
+  "name": "Pegasus",
+  "file": "p14.png",
+  "frame": 7980
+ },
+ {
+  "name": "Isis",
+  "file": "p15.png",
+  "frame": 9368
+ },
+ {
+  "name": "Kaiba",
+  "file": "p16.png",
+  "frame": 9923
+ },
+ {
+  "name": "Jono 2nd",
+  "file": "p17.png",
+  "frame": 10663
+ },
+ {
+  "name": "Teana 2nd",
+  "file": "p18.png",
+  "frame": 11061
+ },
+ {
+  "name": "Mage Soldier",
+  "file": "p19.png",
+  "frame": 11458
+ },
+ {
+  "name": "Ocean Mage",
+  "file": "p20.png",
+  "frame": 12027
+ },
+ {
+  "name": "High Mage Secmeton",
+  "file": "p21.png",
+  "frame": 12437
+ },
+ {
+  "name": "Desert Mage",
+  "file": "p22.png",
+  "frame": 12816
+ },
+ {
+  "name": "High Mage Martis",
+  "file": "p23.png",
+  "frame": 13175
+ },
+ {
+  "name": "Forest Mage",
+  "file": "p24.png",
+  "frame": 13677
+ },
+ {
+  "name": "High Mage Anubisius",
+  "file": "p25.png",
+  "frame": 14006
+ },
+ {
+  "name": "Labyrinth Mage",
+  "file": "p26.png",
+  "frame": 15109
+ },
+ {
+  "name": "Seto 2nd",
+  "file": "p27.png",
+  "frame": 15689
+ },
+ {
+  "name": "Meadow Mage",
+  "file": "p28.png",
+  "frame": 16219
+ },
+ {
+  "name": "High Mage Kepura",
+  "file": "p29.png",
+  "frame": 16610
+ },
+ {
+  "name": "Mountain Mage",
+  "file": "p30.png",
+  "frame": 17042
+ },
+ {
+  "name": "High Mage Atenza",
+  "file": "p31.png",
+  "frame": 17358
+ },
+ {
+  "name": "Guardian Sebek",
+  "file": "p32.png",
+  "frame": 18053
+ },
+ {
+  "name": "Guardian Neku",
+  "file": "p33.png",
+  "frame": 18359
+ },
+ {
+  "name": "Heishin 2nd",
+  "file": "p34.png",
+  "frame": 18800
+ },
+ {
+  "name": "Seto 3rd",
+  "file": "p35.png",
+  "frame": 19234
+ },
+ {
+  "name": "DarkNite",
+  "file": "p36.png",
+  "frame": 20551
+ },
+ {
+  "name": "Nitemare",
+  "file": "p37.png",
+  "frame": 21281
+ }
+]

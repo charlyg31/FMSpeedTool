@@ -53,7 +53,8 @@ overlay on top.
 | Free Duel | "FREE DUEL / SELECT OPPONENT" screen: no split for those duels |
 | Farm | No split ("Split at end of farm" option off by default) |
 | Save loaded | SAVE COMPLETE! remembers how many splits are done; LOAD COMPLETE! (after a death, for example) brings the run back to that save. Option 1 (default): undo in LiveSplit the splits made since the save. Option 2: don't count the splits of the replayed duels |
-| Opponent | Name on the Free Duel screen, or portrait in the dialogue (Pegasus, Isis, Duel Master K) |
+| Opponent | All 39 opponents: name written on the Free Duel screen (read letter by letter), or portrait of the dialogue just before a campaign duel. Checked on two All Duelists runs (YouTube and Twitch, two players): every duel gets the right opponent |
+| All Duelists | Option "All Duelists (DMK + Heishin in Free Duel)" (off by default): the first Free Duel win against Duel Master K and the first one against Heishin (Heishin 1, lost in the campaign) split like campaign wins instead of being farm duels |
 | A-TEC target | Selected automatically against Pegasus |
 
 ### Live duel stats
@@ -71,7 +72,7 @@ overlay on top.
 
 Score (52 + points, clamped to 0..99) and band (S-TEC to S-POW) update live, with advice to reach
 the target. The +/- buttons fix a missed detection (marked with *). A history on the page gives the
-final rank of every duel of the run (campaign and Free Duel).
+final rank of every duel of the run (campaign and Free Duel), with its opponent.
 
 Checked on a full run video: the estimated rank matches the rank shown by the game on all 34 duels
 with a readable rank badge (34/34, including the 5 A-TEC duels against Pegasus).

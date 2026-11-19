@@ -38,6 +38,9 @@ def main(folder, start=0, end=10 ** 9):
 
     tr = tracker.Tracker(digits, builtin, learned, on_event)
     tr.options["load_mode"] = os.environ.get("FM_LOAD_MODE", "undo")   # chargement d'une save
+    for key in tr.options:                                           # FM_OPT_all_duelists=1...
+        if os.environ.get("FM_OPT_" + key):
+            tr.options[key] = True
     if os.environ.get("FM_AUDIO"):
         # Son de la video (WAV mono 22,05 kHz) : decide fusion / equipement.
         import audio

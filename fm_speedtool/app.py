@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
     "use_audio": True,            # le son du jeu tranche entre fusion et equipement
     "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
-                "load_mode": "undo"},
+                "load_mode": "undo", "all_duelists": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
 }
 
@@ -266,7 +266,8 @@ class App:
         for r, title, keys in ((0, _("Timer :"), (("auto_reset", _("Reset auto (NEW GAME)")),
                                                    ("auto_start", _("Demarrer le timer (NEW GAME)")))),
                                (1, _("Splits :"), (("split_first_loss", _("Split 1re defaite (Heishin 1)")),
-                                                    ("split_farm_v2", _("Split fin de farm"))))):
+                                                    ("split_farm_v2", _("Split fin de farm")),
+                                                    ("all_duelists", _("All Duelists (DMK + Heishin en Free Duel)"))))):
             line = row(r, title)
             for key, text in keys:
                 v = tk.BooleanVar(value=self.tracker.options[key])
