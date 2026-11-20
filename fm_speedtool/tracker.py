@@ -475,11 +475,13 @@ class Tracker:
         elif result == "loss":
             # Seule la 1re defaite de campagne (Heishin 1) compte : une defaite en Free
             # Duel ne la decale pas, et les suivantes (mort puis rechargement) ne
-            # splittent pas.
-            if not free:
+            # splittent pas. Adversaire connu (portrait) : seule une defaite contre
+            # Heishin compte (perdre contre Villager 2 avant ne splitte pas).
+            heishin = not free and self.opponent in ("", "Heishin")
+            if heishin:
                 self.losses += 1
             self.on_event("info", _("Defaite{who}", who=who))
-            if self.options["split_first_loss"] and self.losses == 1 and not free:
+            if self.options["split_first_loss"] and self.losses == 1 and heishin:
                 self.pending_split = (_("Split : premiere defaite (Heishin 1)"), now + 10,
                                       SPLIT_FIRST_LOSS, self.opponent)
         else:
@@ -578,11 +580,14 @@ class Tracker:
                 self.battle = {"turn": self.active, "hist": [], "trap": False,
                                "right_def": vision.card_in_defense(img, "right")}
             return
-        if not self.battle["trap"] and self.battle["turn"] == "com" and vision.trap_card_right(img):
-            # Le COM attaque et c'est notre piege qui repond.
+        if not self.battle["trap"] and vision.trap_card_right(img):
+            # Carte de droite = piege : aucun monstre n'est detruit dans ce combat.
             self.battle["trap"] = True
-            self.stats["trap"] += 1
-            self.on_event("stat", _("Piege declenche +1"))
+            if self.battle["turn"] == "com":
+                # Le COM attaque et c'est notre piege qui repond.
+                self.stats["trap"] += 1
+                self.on_event("stat", _("Piege declenche +1"))
+            # A ton tour, c'est un piege du COM (Fake Trap...) : pas une attaque efficace.
         b = self.battle
         if sides:
             b["hist"].append(tuple(sorted(sides)))

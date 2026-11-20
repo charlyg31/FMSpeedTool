@@ -17,7 +17,7 @@ def eff_attacks(frames, monkeypatch):
     monkeypatch.setattr(vision, "battle_cards", lambda img: [s for s, c in (("left", "L"), ("right", "R")) if c in cur["f"]])
     monkeypatch.setattr(vision, "card_flash", lambda img, side="left": "*" in cur["f"])
     monkeypatch.setattr(vision, "card_in_defense", lambda img, side: False)
-    monkeypatch.setattr(vision, "trap_card_right", lambda img: False)
+    monkeypatch.setattr(vision, "trap_card_right", lambda img: "T" in cur["f"])
     tr = tracker.Tracker(vision.DigitReader(os.path.join(tempfile.mkdtemp(), "d.json"),
                                             os.path.join(A, "digits_default.json")),
                          vision.TemplateLibrary(os.path.join(A, "builtin")), None, lambda k, m: None)
@@ -46,3 +46,9 @@ def test_hit_flash_after_hidden_defender(monkeypatch):
     # Defenseur cache un instant (eclat) avant le flash du coup : attaque efficace quand meme.
     seq = "LR LR L L L LR LR -* -* L* L LR LR L L L L L L - -"
     assert eff_attacks(frames(seq), monkeypatch) == 1
+
+
+def test_com_trap_on_your_attack(monkeypatch):
+    """A ton tour, la carte d'en face est un piege du COM (Fake Trap) : rien n'est detruit,
+    pas d'attaque efficace (verifie sur un stream : D-TEC du jeu contre Yami Bakura)."""
+    assert eff_attacks(frames("LR LR LRT LRT LT LT L L L - -"), monkeypatch) == 0

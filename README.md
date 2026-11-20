@@ -74,6 +74,9 @@ Score (52 + points, clamped to 0..99) and band (S-TEC to S-POW) update live, wit
 the target. The +/- buttons fix a missed detection (marked with *). A history on the page gives the
 final rank of every duel of the run (campaign and Free Duel), with its opponent.
 
+Small screen: the "Show" boxes at the bottom of the window hide the panels you don't use (Rank,
+Final 6, History, Options). The window shrinks to the panels left, and the choice is kept.
+
 Checked on a full run video: the estimated rank matches the rank shown by the game on all 34 duels
 with a readable rank badge (34/34, including the 5 A-TEC duels against Pegasus).
 

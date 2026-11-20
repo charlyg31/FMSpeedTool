@@ -72,6 +72,9 @@ Les boutons +/- corrigent une détection ratée (marquée d'un *).
 
 Un historique sur la page donne le rang final de chaque duel de la run (campagne et Free Duel), avec son adversaire.
 
+Petit écran : les cases « Afficher » en bas de la fenêtre masquent les panneaux inutiles (Rang,
+Final 6, Historique, Options). La fenêtre se resserre sur ceux qui restent, et le choix est gardé.
+
 ## Validé sur la vidéo du 20/10/2026
 
 Rang estimé comparé au rang affiché par le jeu : exact sur les 34 duels dont le badge de rang est

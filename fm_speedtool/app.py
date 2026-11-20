@@ -28,7 +28,7 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
-VERSION = "1.18"                  # affichee dans le titre de la fenetre
+VERSION = "1.19"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -42,6 +42,8 @@ DEFAULT_CONFIG = {
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
                 "load_mode": "undo", "all_duelists": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
+    # Modules affiches (petit ecran : n'afficher que le rang, par exemple)
+    "modules": {"rank": True, "f6": True, "log": True, "options": True},
 }
 
 
@@ -149,8 +151,8 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title(f"FM Speed Tool v{VERSION}")
-        root.geometry("1440x940")
-        root.minsize(1100, 700)
+        root.geometry("1440x975")
+        root.minsize(320, 300)
         os.makedirs(APP_DIR, exist_ok=True)
         self.cfg = load_config()
         i18n.set_language(self.cfg.get("language") or i18n.system_language())
@@ -190,17 +192,59 @@ class App:
         page.rowconfigure(2, weight=0)   # options : compactes
 
         self._build_status(page)
-        self._build_rank(self._box(page, _("Duel en cours - rang"), 1, 0))
-        self._build_f6(self._box(page, "Final 6", 1, 1))
-        self._build_log(self._box(page, _("Historique des duels"), 1, 2))
-        self._build_options(self._box(page, _("Options"), 2, 0, colspan=3))
+        self.modules = {"rank": self._box(page, _("Duel en cours - rang"), 1, 0),
+                        "f6": self._box(page, "Final 6", 1, 1),
+                        "log": self._box(page, _("Historique des duels"), 1, 2),
+                        "options": self._box(page, _("Options"), 2, 0, colspan=3)}
+        self._build_rank(self.modules["rank"])
+        self._build_f6(self.modules["f6"])
+        self._build_log(self.modules["log"])
+        self._build_options(self.modules["options"])
         self._build_passwords()
+        self._apply_modules(resize=False)
+        if not all(self.cfg["modules"].get(k, True) for k in self.modules):
+            # Modules masques (reglage garde) : fenetre resserree une fois les panneaux remplis.
+            root.after(500, self._apply_modules)
 
         self.worker.start()
         if self.cfg["livesplit_mode"] == "tcp":
             self._connect_livesplit(quiet=True)
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._tick()
+
+    COLUMN_WEIGHTS = {"rank": 2, "f6": 2, "log": 3}
+
+    def _apply_modules(self, resize=True):
+        """Affiche ou cache les modules choisis ; la fenetre se resserre sur ceux qui restent."""
+        shown = {k: v.get() for k, v in self.module_vars.items()}
+        if not any(shown[k] for k in self.COLUMN_WEIGHTS):
+            shown["rank"] = True              # au moins un module
+            self.module_vars["rank"].set(True)
+            return                            # set() rappelle cette fonction
+        self.cfg["modules"] = shown
+        self._save_config()
+        for col, (key, weight) in enumerate(self.COLUMN_WEIGHTS.items()):
+            box = self.modules[key]
+            if shown[key]:
+                box.grid()
+            else:
+                box.grid_remove()
+            self.page.columnconfigure(col, weight=weight if shown[key] else 0)
+        if shown["options"]:
+            self.modules["options"].grid()
+        else:
+            self.modules["options"].grid_remove()
+        if resize:
+            # Largeur et hauteur demandees par les modules visibles (les barres du haut et
+            # du bas sont coupees si la fenetre est plus etroite qu'elles).
+            self.root.update_idletasks()
+            boxes = [self.modules[k] for k in self.COLUMN_WEIGHTS if shown[k]]
+            w = sum(b.winfo_reqwidth() + 6 for b in boxes) + 12
+            h = max(b.winfo_reqheight() for b in boxes) + 120
+            if shown["options"]:
+                w = max(w, self.modules["options"].winfo_reqwidth() + 12)
+                h += self.modules["options"].winfo_reqheight() + 6
+            self.root.geometry(f"{max(w, 320)}x{max(h, 300)}")
 
     @staticmethod
     def _box(parent, title, row, col, colspan=1):
@@ -217,6 +261,17 @@ class App:
 
         bottom = ttk.Frame(page)
         bottom.grid(row=3, column=0, columnspan=3, sticky="ew")
+        # Modules affiches : ligne a part, tout en bas (reste visible dans une fenetre etroite).
+        shown = ttk.Frame(page)
+        shown.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
+        ttk.Label(shown, text=_("Afficher :")).pack(side="left")
+        self.module_vars = {}
+        for key, text in (("rank", _("Rang")), ("f6", "Final 6"), ("log", _("Historique")),
+                          ("options", _("Options"))):
+            v = tk.BooleanVar(value=self.cfg["modules"].get(key, True))
+            v.trace_add("write", lambda *_a: self._apply_modules())
+            ttk.Checkbutton(shown, text=text, variable=v).pack(side="left", padx=2)
+            self.module_vars[key] = v
         self.host = tk.StringVar(value=self.cfg["host"])
         self.port = tk.StringVar(value=str(self.cfg["port"]))
         ttk.Button(bottom, text=_("Tester split"), command=lambda: self._ls_cmd("split")).pack(side="right")
