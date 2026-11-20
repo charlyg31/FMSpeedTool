@@ -96,6 +96,16 @@ def test_rien_hors_titre_et_deck():
         assert not _calibrate(vision.Framing(REF, vertical=False), img, 5), name
 
 
+def test_epsxe_calage_en_hauteur_neutre():
+    """ePSXe utilise aussi le calage en hauteur d'attente (panneau LP/COM/YOU) : sur une
+    capture directe d'ePSXe, il ne decale ni n'etire rien."""
+    for name in ("e1", "d3", "k2"):
+        img = vision.normalize(vision.GameArea().crop(cv2.imread(os.path.join(ROOT, "captures", name + ".png"))))
+        fr = vision.Framing(REF, vertical=True)
+        _calibrate(fr, img, 5)
+        assert fr.values()[:4] == [0.0, 1.0, 0.0, 1.0], name
+
+
 def test_surveillance_suit_un_changement():
     """Deja cale : un autre reglage d'ePSXe est suivi apres plusieurs mesures concordantes."""
     img = cv2.imread(CAPTURE)

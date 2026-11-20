@@ -170,7 +170,73 @@ class Digits:
         return int(text)
 
 
-def deck_rows(img, digits):
+NAME_X_DECK, NAME_X_CHEST, NAME_DY = 133, 70, 3    # nom de la carte dans une ligne
+
+
+class NameCheck:
+    """Controle du numero lu par le nom ecrit a cote (meme police que l'ecran Free Duel).
+    Un chiffre mal lu (Saggi the Dark Clown 034 -> Dark Magician 035 ; 191 LaLa Li-oon ->
+    192 Key Mace) donne une carte dont le nom ne correspond pas : on prend alors le
+    numero a un chiffre pres dont le nom correspond."""
+
+    OK, BETTER, MARGIN = 0.25, 0.22, 0.12
+    CHARS = 12                    # 12 premieres lettres : assez pour departager
+
+    def __init__(self, glyph_path, db):
+        import opponents
+        self.op = opponents
+        self.reader = opponents.NameReader(glyph_path)
+        self.db = db
+        self._cache = {}
+
+    def _prep_mid(self, line):
+        """Seuil a mi-chemin fond / lettres : lettres pales d'un stream ou de la ligne du curseur."""
+        line = line.astype(np.float32)
+        t = max(60.0, (float(np.median(line)) + float(np.percentile(line, 99.5))) / 2)
+        return np.clip((line - 0.6 * t) / (0.4 * t), 0, 1), (line >= t).astype(np.uint8)
+
+    def _cells(self, line):
+        out = []
+        for prep in (self.op._prepare, self._prep_mid):
+            soft, lit = prep(line)
+            out.append([[g for g in (self.op._cell(soft, lit, k, dx) for dx in (0, -1, 1)) if g is not None]
+                        for k in range(self.CHARS)])
+        return out
+
+    def _cost(self, cells, cid):
+        name = self.db.name(cid)[:self.CHARS]
+        if not name or name.startswith("#"):
+            return 9.0
+        return min(sum(self.reader._cost(c[k], ch) for k, ch in enumerate(name)) / len(name) for c in cells)
+
+    def fix(self, img, x, y, cid):
+        line = img[y:y + self.op.CELL_H, x:x + int(self.op.PITCH * (self.CHARS + 1)) + 2].min(axis=2)
+        key = (cid, x, line.tobytes())
+        if key in self._cache:
+            return self._cache[key]
+        # Chemin rapide (presque toujours suffisant) : seuil habituel, case a sa place.
+        soft, lit = self.op._prepare(line)
+        quick = [[g] if (g := self.op._cell(soft, lit, k)) is not None else [] for k in range(self.CHARS)]
+        c0 = self._cost([quick], cid)
+        best = cid
+        if c0 > self.OK:
+            cells = self._cells(line)
+            c0 = self._cost(cells, cid)
+        if c0 > self.OK:
+            s = "%03d" % cid
+            alts = [int(s[:p] + ch + s[p + 1:]) for p in range(3) for ch in "0123456789" if ch != s[p]]
+            alts = [a for a in alts if 1 <= a <= 722 and a in self.db.cards]
+            if alts:
+                c1, alt = min((self._cost(cells, a), a) for a in alts)
+                if c1 <= self.BETTER and c1 <= c0 - self.MARGIN:
+                    best = alt
+        if len(self._cache) > 4000:
+            self._cache.clear()
+        self._cache[key] = best
+        return best
+
+
+def deck_rows(img, digits, names=None):
     """{ligne: (position, numero)} coherents (positions consecutives)."""
     rows = {}
     for r in range(ROWS):
@@ -178,12 +244,28 @@ def deck_rows(img, digits):
         pos = digits.read(img, [(x, y) for x in DECK_POS_X])
         cid = digits.read(img, [(x, y) for x in DECK_ID_X])
         if pos and cid and 1 <= pos <= DECK_SIZE and 1 <= cid <= 722:
+            if names is not None:
+                cid = names.fix(img, NAME_X_DECK, y + NAME_DY, cid)
             rows[r] = (pos, cid)
     if not rows:
         return {}
     offsets = [pos - r for r, (pos, _) in rows.items()]
     top = max(set(offsets), key=offsets.count)
     return {r: pc for r, pc in rows.items() if pc[0] - r == top}
+
+
+SORT_ICONS_X0, SORT_ICONS_STEP, SORT_ICONS_Y = 232, 36.5, (24, 50)   # 7 icones du bouton ORDER
+
+
+def deck_sort(img):
+    """Tri choisi sur l'ecran DECK (bouton ORDER) : indice de l'icone allumee (0 = NO.), ou None.
+    Icone allumee ~70-80, eteintes ~15 (minimum des 3 couleurs le plus haut de chaque case)."""
+    y0, y1 = SORT_ICONS_Y
+    s = [float(img[y0:y1, int(SORT_ICONS_X0 + SORT_ICONS_STEP * k) - 12:int(SORT_ICONS_X0 + SORT_ICONS_STEP * k) + 12]
+               .max(axis=2).mean()) for k in range(7)]
+    k = int(np.argmax(s))
+    second = max(v for i, v in enumerate(s) if i != k)
+    return k if s[k] - second >= 25 else None
 
 
 def deck_count(img, digits):
@@ -215,7 +297,7 @@ def chest_highlight(img):
                            & (g[..., 0] < 90), 80)
 
 
-def chest_rows(img, digits, box_digits):
+def chest_rows(img, digits, box_digits, names=None):
     """{ligne: (numero, exemplaires dans le coffre, exemplaires dans le deck)}.
     digits : gabarits des numeros du coffre (police un peu differente du deck)."""
     rows = {}
@@ -224,6 +306,8 @@ def chest_rows(img, digits, box_digits):
         cid = digits.read(img, [(x, y) for x in CHEST_ID_X])
         if not cid or not 1 <= cid <= 722:
             continue
+        if names is not None:
+            cid = names.fix(img, NAME_X_CHEST, y + NAME_DY, cid)
         in_chest = box_digits.read(img, [(BOX_IN_CHEST_X, y + BOX_DY)], w=BOX_W)
         in_deck = box_digits.read(img, [(BOX_IN_DECK_X, y + BOX_DY)], w=BOX_W)
         rows[r] = (cid, in_chest, in_deck)
@@ -259,6 +343,7 @@ class DeckWatcher:
         self.tick = 0
         self._prev = None
         self._prev_rows = set()   # lignes (position, carte) de l'image DECK precedente
+        self._sort = None         # tri de la liste (bouton ORDER)
         self._deck_hl_card = None
         self._chest_hl_card = None
         self._chest_rows = {}     # lignes du coffre de la derniere lecture stable
@@ -302,8 +387,17 @@ class DeckWatcher:
             self.known = set(self.deck)
             self.complete = True
 
-    def deck_frame(self, img, digits, count_digits):
-        rows = deck_rows(img, digits)
+    def deck_frame(self, img, digits, count_digits, names=None):
+        # Tri change (bouton ORDER) : les memes cartes changent de position. Les positions
+        # connues ne valent plus rien ; sans ca, les deux ordres se melangeaient (cartes
+        # comptees deux fois, d'autres perdues : 4 Oscillo Hero au lieu de 2 sur une video).
+        mode = deck_sort(img) if img is not None else None
+        if mode is not None:
+            if self._sort is not None and mode != self._sort:
+                self.slots = {}
+                self._prev_rows = set()
+            self._sort = mode
+        rows = deck_rows(img, digits, names) if names is not None else deck_rows(img, digits)
         count = deck_count(img, count_digits)
         hl = deck_highlight(img)
         lines = set(rows.values())
@@ -366,14 +460,14 @@ class DeckWatcher:
             if n > self.deck[cid]:
                 self.deck[cid] = n
 
-    def chest_frame(self, img, digits, box_digits, count_digits=None):
+    def chest_frame(self, img, digits, box_digits, count_digits=None, names=None):
         """Coffre : seuls les AJOUTS comptent (retraits : ecran DECK uniquement).
         Le compteur du deck (en haut a droite) monte de 1 : la carte sous le curseur
         est ajoutee. Elle est lue juste avant, tant que sa ligne est claire : une carte
         dont le dernier exemplaire part dans le deck est grisee, et ses chiffres pales
         se lisent mal (332 -> 333, 203 -> 303, 160 -> 150 sur une video de stream).
         Compteur illisible : repli sur la case "dans le deck" de chaque ligne."""
-        rows = chest_rows(img, digits, box_digits)
+        rows = chest_rows(img, digits, box_digits, names) if names is not None else chest_rows(img, digits, box_digits)
         hl = chest_highlight(img)
         count = chest_count(img, count_digits) if count_digits is not None else None
         if not self._stable("chest", (tuple(sorted(rows.items())), hl, count)):
@@ -381,11 +475,23 @@ class DeckWatcher:
         events = []
         if count is not None and 1 <= count <= DECK_SIZE:
             self._chest_count_seen = True
-            if self.count is not None and count > self.count:
+            if self.count is not None and count == self.count + 1:
                 cid = self._added_card(rows, hl)
                 if cid is not None:
-                    events += self._apply("+", cid, count - self.count)
+                    events += self._apply("+", cid)
                     self.slots = {}   # position inconnue : la liste devra etre relue
+            elif self.count is not None and count > self.count:
+                # Compteur qui saute de plusieurs cartes (ajouts rapides, ou compteur pas lu
+                # entre deux) : on ne sait pas quelles cartes ont ete ajoutees. Une video
+                # donnait 6 exemplaires de la carte du curseur au lieu de 6 cartes differentes.
+                # Seules comptent les lignes visibles dont la case "dans le deck" a monte ;
+                # le reste sera retrouve en relisant la liste du deck.
+                prev = self._chest_rows
+                for i, (cid, _in_chest, in_deck) in rows.items():
+                    if (i in prev and prev[i][0] == cid and in_deck is not None and prev[i][2] is not None
+                            and in_deck > prev[i][2]):
+                        events += self._apply("+", cid, in_deck - prev[i][2])
+                self.slots = {}
             # Le compteur ne baisse pas dans le coffre : une baisse isolee est une
             # mauvaise lecture (sinon un ajout serait compte deux fois).
             if self.count is None or count >= self.count:
@@ -463,6 +569,8 @@ class DeckReader:
         self.chest_digits = Digits(os.path.join(assets, "chest_digits.npz"), white_glyph_rel)
         self.box_digits = Digits(os.path.join(assets, "box_digits.npz"), dark_glyph)
         self.db = CardDB(os.path.join(assets, "cards.json"))
+        glyphs = os.path.join(assets, "name_glyphs.npz")
+        self.names = NameCheck(glyphs, self.db) if os.path.exists(glyphs) else None
         self.watcher = DeckWatcher()
         self.version = 0          # change a chaque modification du deck connu
 
@@ -470,10 +578,11 @@ class DeckReader:
         """screen : 'deck', 'chest' ou None. Retourne [('+'|'-', nom)]."""
         before = Counter(self.watcher.deck)
         if screen == "deck":
-            events = self.watcher.deck_frame(img, self.deck_digits, self.count_digits)
+            events = self.watcher.deck_frame(img, self.deck_digits, self.count_digits, self.names)
         elif screen == "chest":
             # Coffre : seuls les ajouts de cartes comptent (les retraits se voient sur l'ecran DECK).
-            events = self.watcher.chest_frame(img, self.chest_digits, self.box_digits, self.count_digits)
+            events = self.watcher.chest_frame(img, self.chest_digits, self.box_digits, self.count_digits,
+                                              self.names)
         else:
             self.watcher.other_frame()
             events = []

@@ -29,7 +29,7 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
-VERSION = "1.21"                  # affichee dans le titre de la fenetre
+VERSION = "1.22"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -178,10 +178,13 @@ class App:
         self.tracker = tracker.Tracker(self.digits, self.builtin, None,
                                        lambda k, m: self.worker.on_event(k, m), deck=self.deck)
         self.tracker.options.update(self.cfg["options"])
-        # Cadrage de l'image (ePSXe et PS2) : cale sur l'ecran du deck, garde d'une session a l'autre.
+        # Cadrage de l'image (ePSXe et PS2) : cale sur l'ecran titre ou du deck, garde d'une
+        # session a l'autre. En attendant ces ecrans, calage en hauteur sur le panneau
+        # LP/COM/YOU ou le menu titre, pour ePSXe aussi (fenetre avec bordures, logiciel
+        # lance en pleine run).
         self.framing_key = "ps2_framing" if ps2 else "epsxe_framing"
         self.tracker.framing = vision.Framing.from_values(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
-                                                          self.cfg.get(self.framing_key), vertical=ps2)
+                                                          self.cfg.get(self.framing_key), vertical=True)
         self._setup_audio()
         self.worker = Worker(self)
         self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None)
