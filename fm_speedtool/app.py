@@ -14,6 +14,7 @@ from tkinter import messagebox, ttk
 import capture
 import deckscreen
 import f6calc
+import f6window
 import fmlogic
 import i18n
 import livesplit_bridge
@@ -44,6 +45,7 @@ DEFAULT_CONFIG = {
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
     # Modules affiches (petit ecran : n'afficher que le rang, par exemple)
     "modules": {"rank": True, "f6": True, "log": True, "options": True},
+    "f6_window": False, "f6_window_geometry": None,   # fenetre Final 6 en images
 }
 
 
@@ -264,8 +266,13 @@ class App:
         shown.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         ttk.Label(shown, text=_("Afficher :")).pack(side="left")
         self.module_vars = {}
+        # Fenetre Final 6 en images (a part) : affichee ou cachee, comme les panneaux.
+        self.f6_window_var = tk.BooleanVar(value=False)
         for key, text in (("rank", _("Rang")), ("f6", "Final 6"), ("log", _("Historique")),
-                          ("options", _("Options"))):
+                          ("f6_window", _("Fenetre Final 6")), ("options", _("Options"))):
+            if key == "f6_window":
+                ttk.Checkbutton(shown, text=text, variable=self.f6_window_var).pack(side="left", padx=2)
+                continue
             v = tk.BooleanVar(value=self.cfg["modules"].get(key, True))
             v.trace_add("write", lambda *_a: self._apply_modules())
             ttk.Checkbutton(shown, text=text, variable=v).pack(side="left", padx=2)
@@ -603,7 +610,19 @@ class App:
             v = tk.StringVar(value="-")
             ttk.Label(res, textvariable=v, width=7).grid(row=1 + i // 3, column=(i % 3) * 2 + 1, sticky="w")
             self.f6_each[name] = v
-        ttk.Button(box, text=_("Ouvrir aussi sur fusion.lukadevv.com"), command=self._open_f6).pack(fill="x", pady=4)
+        links = ttk.Frame(box)
+        links.pack(fill="x", pady=4)
+        self.f6_window_text = tk.StringVar(value=_("Afficher la fenetre Final 6"))
+        ttk.Button(links, textvariable=self.f6_window_text,
+                   command=lambda: self.f6_window_var.set(not self.f6_window_var.get())).pack(
+            side="left", fill="x", expand=True, padx=(0, 2))
+        ttk.Button(links, text=_("Ouvrir aussi sur fusion.lukadevv.com"), command=self._open_f6).pack(
+            side="left", fill="x", expand=True, padx=(2, 0))
+        self.f6_window = None
+        self._f6_result = None
+        self.f6_window_var.trace_add("write", lambda *_a: self._show_f6_window(self.f6_window_var.get()))
+        if self.cfg.get("f6_window"):
+            self.root.after(300, lambda: self.f6_window_var.set(True))
 
         for v in list(self.f6_vars.values()) + list(self.equip_vars.values()) + [self.dark_hole]:
             v.trace_add("write", lambda *_a: self._schedule_f6())
@@ -702,6 +721,36 @@ class App:
         self.f6_total.set(f"Final 6 : {r['Final 6'] * 100:.1f} %")
         for name, v in self.f6_each.items():
             v.set(f"{r[name] * 100:.1f} %")
+        self._f6_result = r
+        self._update_f6_window()
+
+    def _update_f6_window(self):
+        if self.f6_window is not None:
+            counts, dark_hole, equips = self._f6_inputs()
+            self.f6_window.update(counts, dark_hole, equips, self._f6_result)
+
+    def _show_f6_window(self, show):
+        """Affiche ou cache la fenetre Final 6 en images (boss, %, cartes du deck)."""
+        self.f6_window_text.set(_("Cacher la fenetre Final 6") if show else _("Afficher la fenetre Final 6"))
+        if show and self.f6_window is None:
+            self.f6_window = f6window.F6Window(
+                self.root, os.path.join(BASE_DIR, "assets", "f6"),
+                on_dark_hole=lambda: self.dark_hole.set(not self.dark_hole.get()),
+                on_close=self._f6_window_closed, geometry=self.cfg.get("f6_window_geometry"))
+            self._update_f6_window()
+        elif not show and self.f6_window is not None:
+            self.f6_window.close()            # rappelle _f6_window_closed
+            return
+        self.cfg["f6_window"] = show
+        self._save_config()
+
+    def _f6_window_closed(self, geometry):
+        """Fenetre fermee (croix ou bouton) : sa place est gardee pour la prochaine fois."""
+        self.f6_window = None
+        self.cfg["f6_window"], self.cfg["f6_window_geometry"] = False, geometry
+        self._save_config()
+        if self.f6_window_var.get():
+            self.f6_window_var.set(False)
 
     def _open_f6(self):
         counts, dark_hole, equips = self._f6_inputs()
@@ -808,6 +857,9 @@ class App:
             pass
 
     def close(self):
+        if self.f6_window is not None:        # reste ouverte au prochain lancement, a sa place
+            self.cfg["f6_window_geometry"] = self.f6_window.geometry()
+            self._save_config()
         self.worker.running = False
         self.livesplit.close()
         self.root.destroy()

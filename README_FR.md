@@ -123,6 +123,12 @@ en plus se comptent comme Crush Card (règle du tableur).
 le tableur a 6 cases d'équipement, donc au-delà de 6 les 6 meilleurs comptent.
 Le bouton « Ouvrir aussi sur fusion.lukadevv.com » copie un lien à coller via IMPORT sur le site.
 
+Le bouton « Afficher la fenêtre Final 6 » (ou la case « Fenêtre Final 6 » de la ligne « Afficher ») ouvre
+ou cache une fenêtre à part qui se remplit toute seule : les 6 boss et le
+Final 6 avec leur %, puis les cartes du deck en images avec leur nombre (grisées à 0). Clique sur la case
+Raigeki pour passer à Dark Hole. La fenêtre se capture dans OBS ; sa place est gardée et elle se rouvre au
+lancement. Les illustrations des cartes sont celles du jeu, et les portraits viennent des dialogues d'avant-duel.
+
 ## Mots de passe
 
 Sur l'écran PASSWORD du jeu, la page est remplacée par les codes des cartes utiles achetables

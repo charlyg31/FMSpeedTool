@@ -116,6 +116,12 @@ Equips have one counter per type, several copies allowed (Megamorph has its own 
 spreadsheet has 6 equip slots, so with more than 6 the best 6 count.
 "Also open on fusion.lukadevv.com" copies a link to paste with IMPORT on that site.
 
+"Show the Final 6 window" (or the "Final 6 window" box of the "Show" line) shows or hides a separate
+window that fills itself: the 6 bosses and the Final 6
+with their %, then the deck cards as pictures with their count (greyed at 0). Click the Raigeki tile to
+switch to Dark Hole. The window can be captured in OBS; its place is kept and it reopens at launch.
+The card pictures are the game's own, and the portraits come from the pre-duel dialogues.
+
 ## Passwords
 
 On the game's PASSWORD screen, the page is replaced by the codes of useful cards you can buy
