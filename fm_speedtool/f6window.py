@@ -31,14 +31,15 @@ LAYOUTS = {"horizontal": (7, 8, "top"), "wide": (7, 12, "top"), "square": (4, 5,
 LAYOUT_NAMES = {"horizontal": N_("Horizontale (8 cartes par ligne)"), "wide": N_("Large (12 cartes par ligne)"),
                 "square": N_("Carree (5 cartes par ligne)"), "vertical": N_("Verticale (3 cartes par ligne)"),
                 "column": N_("Colonne etroite (2 cartes par ligne)"), "side": N_("Boss a gauche, cartes a droite")}
-SHOW_NAMES = (("show_bosses", N_("Boss")), ("show_rates", N_("Taux de victoire")),
+RANK = "rank"                                              # case du rang du duel en cours
+SHOW_NAMES = (("show_bosses", N_("Boss")), ("show_rank", N_("Rang du duel en cours")), ("show_rates", N_("Taux de victoire")),
               ("show_names", N_("Noms des boss")), ("show_totals", N_("Recap (Dragons, Equipements...)")),
               ("show_cards", N_("Cartes")), ("hide_zero", N_("Masquer les cartes a 0")),
               ("topmost", N_("Toujours au premier plan")))
 SCALES = (50, 60, 75, 90, 100, 125, 150)
 # Fond de la fenetre : vert uni pour le rendre transparent dans OBS (filtre Cle chromatique)
 BACKGROUNDS = {"dark": (BG, N_("Sombre")), "green": ("#00ff00", N_("Vert (cle chromatique OBS)"))}
-DEFAULT_VIEW = {"layout": "horizontal", "scale": 100, "show_bosses": True, "show_rates": True,
+DEFAULT_VIEW = {"layout": "horizontal", "scale": 100, "show_bosses": True, "show_rank": True, "show_rates": True,
                 "show_names": True, "show_totals": True, "show_cards": True, "hide_zero": False,
                 "topmost": False, "bg": "dark", "order": list(TILES), "boss_order": list(BOSSES), "hidden": []}
 
@@ -95,6 +96,8 @@ class F6Window:
         self.win.protocol("WM_DELETE_WINDOW", self.close)
         self.cache = {}
         self.inputs = ({f: 0 for f in fmlogic.F6_FIELDS}, False, [], None)
+        self.rank = None              # (rang, score, dans l'objectif, en duel)
+        self._rank_drawn = False
         self.drag = None
         self._hover = None
         self.body = None
@@ -120,12 +123,21 @@ class F6Window:
         boss_cols, card_cols, side = LAYOUTS[v["layout"]]
         pad = self.s(4)
         main = self.body
-        if v["show_bosses"]:
+        if v["show_rank"] and boss_cols == 7:
+            boss_cols = 8             # le rang a cote des 7 boss, sur la meme ligne
+        self.rank_labels = None
+        self._rank_drawn = False
+        if v["show_bosses"] or v["show_rank"]:
             top = tk.Frame(main, bg=BG)
             top.pack(side="left" if side == "left" else "top", anchor="n", padx=(0, pad) if side == "left" else 0,
                      pady=(0, pad))
-            shown = [b for b in v["boss_order"] if b not in v["hidden"]]
+            shown = [b for b in v["boss_order"] if b not in v["hidden"]] if v["show_bosses"] else []
+            if v["show_rank"]:
+                shown.append(RANK)
             for i, name in enumerate(shown):
+                if name == RANK:
+                    self._rank_tile(top, i // boss_cols, i % boss_cols, pad)
+                    continue
                 f = tk.Frame(top, bg=TILE_BG, highlightbackground=BORDER, highlightthickness=max(1, self.s(2)))
                 f.grid(row=i // boss_cols, column=i % boss_cols, padx=pad // 2 + 1, pady=pad // 2 + 1, sticky="nsew")
                 img = tk.Label(f, image=self._image(BOSS_FILES[name], (self.s(BOSS), self.s(BOSS))), bg=TILE_BG)
@@ -181,6 +193,39 @@ class F6Window:
         self._bind_all(self.win)
         self._last_state = None
         self.update(*self.inputs, force=True)
+        if self.rank:
+            self.set_rank(*self.rank)
+
+    def _rank_tile(self, parent, row, col, pad):
+        """Case du rang presume du duel en cours (meme rang que le panneau Rang)."""
+        f = tk.Frame(parent, bg=TILE_BG, highlightbackground=BORDER, highlightthickness=max(1, self.s(2)))
+        f.grid(row=row, column=col, padx=pad // 2 + 1, pady=pad // 2 + 1, sticky="nsew")
+        inner = tk.Frame(f, bg=TILE_BG)
+        inner.pack(expand=True, padx=self.s(8), pady=self.s(6))   # centre dans la hauteur de la ligne
+        title = tk.Label(inner, text=_("Dernier duel"), fg=DIM, bg=TILE_BG, font=("Segoe UI", self.s(10), "bold"))
+        title.pack()
+        band = tk.Label(inner, text="-", fg=TEXT, bg=TILE_BG, font=("Segoe UI", self.s(22), "bold"))
+        band.pack()
+        score = tk.Label(inner, text="", fg=DIM, bg=TILE_BG, font=("Segoe UI", self.s(15), "bold"))
+        score.pack()
+        for w in (f, inner, title, band, score):
+            self.widgets[w] = ("rank", RANK)
+        self.rank_labels = (title, band, score)
+
+    def set_rank(self, band, score, ok, in_duel):
+        """Rang du duel en cours : vert quand il est dans l'objectif du panneau Rang.
+        Appele 5 fois par seconde : rien n'est redessine si le rang n'a pas change."""
+        if (band, score, ok, in_duel) == self.rank and self._rank_drawn:
+            return
+        self.rank = (band, score, ok, in_duel)
+        self._rank_drawn = bool(self.rank_labels)
+        if not self.rank_labels or not self.win.winfo_exists():
+            return
+        title, b, s = self.rank_labels
+        title.configure(text=_("Duel en cours") if in_duel else _("Dernier duel"))
+        color = "#5ac46e" if ok else TEXT
+        b.configure(text=band, fg=color)
+        s.configure(text=str(score), fg=color if ok else DIM)
 
     def _bind_all(self, w):
         w.bind("<Button-3>", self._menu)
@@ -350,7 +395,10 @@ class F6Window:
             bg.add_radiobutton(label=_(label), value=key, variable=self._bg_var, command=lambda k=key: self._set("bg", k))
         m.add_cascade(label=_("Fond"), menu=bg)
         m.add_separator()
-        if target:
+        if target and target[0] == "rank":
+            m.add_command(label=_("Masquer la case {name}", name=_("Rang du duel en cours")),
+                          command=lambda: self._set("show_rank", False))
+        elif target:
             kind, key = target
             label = key if kind == "boss" else self._card_name(key)
             m.add_command(label=_("Masquer la case {name}", name=label), command=lambda k=key: self._hide(k))

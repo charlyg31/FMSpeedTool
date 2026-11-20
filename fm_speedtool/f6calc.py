@@ -95,6 +95,11 @@ class F6Calculator:
             inputs = [self._key(c) for c in list(FIELD_CELLS.values()) + [DARK_HOLE_CELL] + EQUIP_CELLS]
             outputs = [self._key(c) for c in OUT_CELLS]
             self.func = xl.compile(inputs=inputs, outputs=outputs)
+            # Le modele complet du classeur ne sert plus (seule la fonction compilee reste) :
+            # ~250 Mo rendus tout de suite au lieu de rester occupes.
+            del xl
+            import gc
+            gc.collect()
         except Exception as e:  # le calcul reste possible via le site
             import traceback
             self.error = f"{type(e).__name__}: {e}"

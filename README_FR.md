@@ -128,8 +128,8 @@ ou cache une fenêtre à part qui se remplit toute seule : les 6 boss et le
 Final 6 avec leur %, puis les cartes du deck en images avec leur nombre (grisées à 0). Clique sur la case
 Raigeki pour passer à Dark Hole. La fenêtre se capture dans OBS ; sa place est gardée et elle se rouvre au
 lancement. Clic droit dans la fenêtre pour la personnaliser : disposition (horizontale, large, carrée,
-verticale, colonne étroite, boss à gauche), taille de 50 à 150 %, parties affichées (boss, taux, noms, récap,
-cartes), cartes à 0 masquées, fond sombre ou vert (à rendre transparent dans OBS avec le filtre « Clé
+verticale, colonne étroite, boss à gauche), taille de 50 à 150 %, parties affichées (boss, rang du duel en cours,
+taux, noms, récap, cartes), cartes à 0 masquées, fond sombre ou vert (à rendre transparent dans OBS avec le filtre « Clé
 chromatique »), toujours au premier plan, masquer une case. La zone des cartes garde toujours la même
 taille : avec les cartes à 0 masquées, les cartes possédées se regroupent en haut sans que la fenêtre (et
 donc la source OBS) change de taille. Glisse une carte sur une autre pour la

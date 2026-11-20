@@ -121,7 +121,8 @@ window that fills itself: the 6 bosses and the Final 6
 with their %, then the deck cards as pictures with their count (greyed at 0). Click the Raigeki tile to
 switch to Dark Hole. The window can be captured in OBS; its place is kept and it reopens at launch.
 Right click in the window to customize it: layout (horizontal, wide, square, vertical, narrow column,
-bosses left), size from 50 to 150 %, parts shown (bosses, rates, names, summary, cards), hide cards at 0,
+bosses left), size from 50 to 150 %, parts shown (bosses, current duel rank, rates,
+names, summary, cards), hide cards at 0,
 dark or green background (made transparent in OBS with the "Chroma Key" filter), always on top,
 hide a tile. The card area always keeps the same size: with cards at 0 hidden, the owned cards gather
 at the top while the window (and so the OBS source) keeps its size. Drag a card onto another to move it (bosses keep the game's order). These settings are kept.

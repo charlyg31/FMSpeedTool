@@ -577,6 +577,8 @@ class App:
         lo, hi = fmlogic.band_range(target)
         shown = max(0, min(99, total))  # le jeu borne le score a 0..99
         self.rank_big.set(f"{fmlogic.band(total)}  {shown}" + ("  OK" if lo <= total <= hi else ""))
+        if self.f6_window is not None:
+            self.f6_window.set_rank(fmlogic.band(total), shown, lo <= total <= hi, tr.in_duel)
         mode = "Free Duel" if tr.free_duel else _("Campagne")
         opp = _(" contre {name}", name=tr.opponent) if tr.opponent else ""
         self.duel_info.set((_("Duel en cours") if tr.in_duel else _("Hors duel")) + f"{opp} - {mode}"
