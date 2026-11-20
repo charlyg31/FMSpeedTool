@@ -20,11 +20,11 @@ Outil de speedrun pour Yu-Gi-Oh! Forbidden Memories (US, 15 Card Mod) sur ePSXe.
 - **LiveSplit, avec le script (recommandé)** : copie `FMSpeedTool.asl` (fourni avec le .exe) dans le
   dossier de LiveSplit, puis clic droit > Edit Layout… > (+) > Control > **Scriptable Auto Splitter** >
   Script Path : `FMSpeedTool.asl`. Coche Start / Split / Reset et, dans les réglages du script, les
-  splits voulus (victoires, 1re défaite, fin de farm…). Choisis « Script FMSpeedTool.asl » en bas du
-  logiciel. Le script ne lit pas la mémoire du jeu : il lit seulement ce que publie FMSpeedTool.exe,
+  splits voulus (victoires, 1re défaite, fin de farm…). Choisis « Script FMSpeedTool.asl » dans le
+  panneau Options. Le script ne lit pas la mémoire du jeu : il lit seulement ce que publie FMSpeedTool.exe,
   qui doit tourner pendant la run. Retire l'ancien autosplitter du layout pour ne pas splitter deux fois.
-- **LiveSplit en TCP (secours)** : clic droit > Control > Start TCP Server, choisis « TCP » en bas du
-  logiciel, puis « Connecter LiveSplit ».
+- **LiveSplit en TCP (secours)** : clic droit > Control > Start TCP Server, choisis « TCP » dans le
+  panneau Options, puis « Connecter LiveSplit ».
 
 ## Jouer sur PS2 (carte d'acquisition)
 
@@ -149,7 +149,7 @@ dans chaque langue.
 ## Options
 
 Le panneau Options regroupe le timer, les splits, le choix au LOAD d'une save (annuler ou ne
-pas compter les duels rejoués), le son du jeu, la langue et les mots de passe utiles.
+pas compter les duels rejoués), la liaison LiveSplit (script ou TCP), le son du jeu, la langue et les mots de passe utiles.
 Tes réglages vont dans `%APPDATA%\FMSpeedTool`.
 
 ## Code source
@@ -167,6 +167,6 @@ ignorés sans lui.
 
 Merci à Hippochan, Exarion et lukadev pour les informations partagées.
 
-Merci aux joueurs qui ont essayé le logiciel et envoyé leurs retours : AEtienne.
+Merci aux joueurs qui ont essayé le logiciel et envoyé leurs retours : AEtienne, Aifo0s.
 
 Licence MIT.

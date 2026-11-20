@@ -23,11 +23,11 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
 - **LiveSplit with the script (recommended)**: copy `FMSpeedTool.asl` (shipped with the .exe) to the
   LiveSplit folder, then right click > Edit Layout… > (+) > Control > **Scriptable Auto Splitter** >
   Script Path: `FMSpeedTool.asl`. Tick Start / Split / Reset and, in the script settings, the splits
-  you want (wins, first loss…). Pick "Script FMSpeedTool.asl" at the bottom of the tool. The script
+  you want (wins, first loss…). Pick "Script FMSpeedTool.asl" in the Options panel. The script
   does not read the game memory: it only reads what FMSpeedTool.exe publishes, so the tool must run
   during the run. Remove any other autosplitter from the layout so you don't split twice.
-- **LiveSplit over TCP (fallback)**: right click > Control > Start TCP Server, pick "TCP" at the
-  bottom of the tool, then "Connect LiveSplit".
+- **LiveSplit over TCP (fallback)**: right click > Control > Start TCP Server, pick "TCP" in the
+  Options panel, then "Connect LiveSplit".
 
 ## Playing on PS2 (capture card)
 
@@ -141,7 +141,7 @@ Shipped language files are in `fm_speedtool/lang`. After changing a text in the 
 ## Options
 
 The Options panel holds the timer and split options, what to do when a save is loaded (undo or
-don't count the replayed duels), the game sound, the language and the useful passwords.
+don't count the replayed duels), the LiveSplit link (script or TCP), the game sound, the language and the useful passwords.
 Your settings go to `%APPDATA%\FMSpeedTool`.
 
 ## Source code
@@ -162,6 +162,6 @@ Rank formula: game rank table (same as hippochan's FMRankCalc). Final 6 win rate
 
 Thanks to Hippochan, Exarion and lukadev for the information they shared.
 
-Thanks to the players who tried the tool and sent feedback: AEtienne.
+Thanks to the players who tried the tool and sent feedback: AEtienne, Aifo0s.
 
 License: MIT.

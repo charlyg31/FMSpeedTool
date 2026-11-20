@@ -259,11 +259,9 @@ class App:
         top.grid(row=0, column=0, columnspan=3, sticky="ew")
         self.status = tk.StringVar()
 
-        bottom = ttk.Frame(page)
-        bottom.grid(row=3, column=0, columnspan=3, sticky="ew")
         # Modules affiches : ligne a part, tout en bas (reste visible dans une fenetre etroite).
         shown = ttk.Frame(page)
-        shown.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(2, 0))
+        shown.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(2, 0))
         ttk.Label(shown, text=_("Afficher :")).pack(side="left")
         self.module_vars = {}
         for key, text in (("rank", _("Rang")), ("f6", "Final 6"), ("log", _("Historique")),
@@ -272,20 +270,6 @@ class App:
             v.trace_add("write", lambda *_a: self._apply_modules())
             ttk.Checkbutton(shown, text=text, variable=v).pack(side="left", padx=2)
             self.module_vars[key] = v
-        self.host = tk.StringVar(value=self.cfg["host"])
-        self.port = tk.StringVar(value=str(self.cfg["port"]))
-        ttk.Button(bottom, text=_("Tester split"), command=lambda: self._ls_cmd("split")).pack(side="right")
-        ttk.Button(bottom, text=_("Connecter LiveSplit"), command=self._connect_livesplit).pack(side="right", padx=4)
-        ttk.Entry(bottom, textvariable=self.port, width=6).pack(side="right")
-        ttk.Entry(bottom, textvariable=self.host, width=10).pack(side="right", padx=2)
-        ttk.Label(bottom, text="TCP (Control > Start TCP Server) :").pack(side="right", padx=4)
-        # Mode de liaison avec LiveSplit : script .asl (recommande) ou serveur TCP.
-        self.ls_mode = tk.StringVar(value=self.cfg["livesplit_mode"])
-        self.ls_mode.trace_add("write", lambda *_a: self._set_ls_mode())
-        ttk.Radiobutton(bottom, text="TCP", value="tcp", variable=self.ls_mode).pack(side="right", padx=(2, 12))
-        ttk.Radiobutton(bottom, text="Script FMSpeedTool.asl", value="script",
-                        variable=self.ls_mode).pack(side="right")
-        ttk.Label(bottom, text=_("LiveSplit :")).pack(side="right", padx=4)
         # Source du jeu (en haut a droite) : fenetre ePSXe, ou fenetre qui affiche la
         # PS2 (carte d'acquisition, projecteur OBS...).
         self.source = tk.StringVar(value=self.cfg.get("source", "epsxe"))
@@ -340,8 +324,23 @@ class App:
         ttk.Radiobutton(load, text=_("2 : ne pas compter les splits des duels rejoues"),
                         value="skip", variable=self.load_mode).pack(side="left", padx=4)
 
+        # Mode de liaison avec LiveSplit : script .asl (recommande) ou serveur TCP.
+        ls = row(3, _("LiveSplit :"))
+        self.ls_mode = tk.StringVar(value=self.cfg["livesplit_mode"])
+        self.ls_mode.trace_add("write", lambda *_a: self._set_ls_mode())
+        self.host = tk.StringVar(value=self.cfg["host"])
+        self.port = tk.StringVar(value=str(self.cfg["port"]))
+        ttk.Radiobutton(ls, text="Script FMSpeedTool.asl", value="script",
+                        variable=self.ls_mode).pack(side="left", padx=4)
+        ttk.Radiobutton(ls, text="TCP", value="tcp", variable=self.ls_mode).pack(side="left", padx=(4, 12))
+        ttk.Label(ls, text="TCP (Control > Start TCP Server) :").pack(side="left", padx=4)
+        ttk.Entry(ls, textvariable=self.host, width=10).pack(side="left", padx=2)
+        ttk.Entry(ls, textvariable=self.port, width=6).pack(side="left")
+        ttk.Button(ls, text=_("Connecter LiveSplit"), command=self._connect_livesplit).pack(side="left", padx=4)
+        ttk.Button(ls, text=_("Tester split"), command=lambda: self._ls_cmd("split")).pack(side="left")
+
         misc = ttk.Frame(box)
-        misc.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        misc.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         self.audio_var = tk.BooleanVar(value=self.cfg.get("use_audio", True))
         self.audio_var.trace_add("write", lambda *_a: self._set_audio())
         ttk.Checkbutton(misc, text=_("Son (fusion / equipement)"), variable=self.audio_var).pack(side="left", padx=4)
