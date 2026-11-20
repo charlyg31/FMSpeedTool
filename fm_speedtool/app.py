@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     # Modules affiches (petit ecran : n'afficher que le rang, par exemple)
     "modules": {"rank": True, "f6": True, "log": True, "options": True},
     "f6_window": False, "f6_window_geometry": None,   # fenetre Final 6 en images
+    "f6_view": {},                # son apparence (clic droit dans la fenetre)
 }
 
 
@@ -206,7 +207,7 @@ class App:
         self._apply_modules(resize=False)
         if not all(self.cfg["modules"].get(k, True) for k in self.modules):
             # Modules masques (reglage garde) : fenetre resserree une fois les panneaux remplis.
-            root.after(500, self._apply_modules)
+            root.after(500, lambda: self._apply_modules(resize="startup"))
 
         self.worker.start()
         if self.cfg["livesplit_mode"] == "tcp":
@@ -225,6 +226,42 @@ class App:
             return                            # set() rappelle cette fonction
         self.cfg["modules"] = shown
         self._save_config()
+        prev, self._modules_prev = getattr(self, "_modules_prev", None), dict(shown)
+        if resize == "startup" or (resize and prev is None):
+            # Lancement avec des modules masques : taille demandee par ceux qui restent.
+            self._grid_modules(shown)
+            self.root.update_idletasks()
+            boxes = [self.modules[k] for k in self.COLUMN_WEIGHTS if shown[k]]
+            w = sum(b.winfo_reqwidth() + 6 for b in boxes) + 12
+            h = max(b.winfo_reqheight() for b in boxes) + 120
+            if shown["options"]:
+                w = max(w, self.modules["options"].winfo_reqwidth() + 12)
+                h += self.modules["options"].winfo_reqheight() + 6
+            self.root.geometry(f"{max(w, 320)}x{max(h, 300)}")
+        elif resize and prev != shown:
+            # Case cochee / decochee : nouvelle taille calculee avec les tailles demandees par les
+            # panneaux (sans attendre leur nouvel affichage), puis panneaux et taille d'un coup. La hauteur
+            # ne bouge que pour le panneau Options ; la fenetre reste a sa place.
+            boxes = [self.modules[k] for k in self.COLUMN_WEIGHTS if shown[k]]
+            w = sum(b.winfo_reqwidth() + 6 for b in boxes) + 12
+            if shown["options"]:
+                w = max(w, self.modules["options"].winfo_reqwidth() + 12)
+            h = self.root.winfo_height()
+            if shown["options"] != prev["options"]:
+                dh = self.modules["options"].winfo_reqheight() + 6
+                h += dh if shown["options"] else -dh
+            w, h = max(w, 320), max(h, 300)
+            # Reste a sa place, sauf si elle depasserait de l'ecran (Windows bloquerait alors
+            # l'agrandissement) : elle remonte / se decale juste assez.
+            x = max(0, min(self.root.winfo_x(), self.root.winfo_screenwidth() - w))
+            y = max(0, min(self.root.winfo_y(), self.root.winfo_screenheight() - h - 48))
+            self._grid_modules(shown)
+            # Apres le placement des panneaux (sinon Tk remet l'ancienne taille), meme passage.
+            self.root.after_idle(lambda: self.root.geometry(f"{w}x{h}+{x}+{y}"))
+        else:
+            self._grid_modules(shown)
+
+    def _grid_modules(self, shown):
         for col, (key, weight) in enumerate(self.COLUMN_WEIGHTS.items()):
             box = self.modules[key]
             if shown[key]:
@@ -236,17 +273,6 @@ class App:
             self.modules["options"].grid()
         else:
             self.modules["options"].grid_remove()
-        if resize:
-            # Largeur et hauteur demandees par les modules visibles (les barres du haut et
-            # du bas sont coupees si la fenetre est plus etroite qu'elles).
-            self.root.update_idletasks()
-            boxes = [self.modules[k] for k in self.COLUMN_WEIGHTS if shown[k]]
-            w = sum(b.winfo_reqwidth() + 6 for b in boxes) + 12
-            h = max(b.winfo_reqheight() for b in boxes) + 120
-            if shown["options"]:
-                w = max(w, self.modules["options"].winfo_reqwidth() + 12)
-                h += self.modules["options"].winfo_reqheight() + 6
-            self.root.geometry(f"{max(w, 320)}x{max(h, 300)}")
 
     @staticmethod
     def _box(parent, title, row, col, colspan=1):
@@ -626,8 +652,14 @@ class App:
 
         for v in list(self.f6_vars.values()) + list(self.equip_vars.values()) + [self.dark_hole]:
             v.trace_add("write", lambda *_a: self._schedule_f6())
-        self.f6 = f6calc.F6Calculator(os.path.join(BASE_DIR, "assets", "f6_model.xlsx"))
-        threading.Thread(target=self._load_f6, daemon=True).start()
+        # Tableur d'Exarion dans un processus a part : son chargement (~15 s) figeait
+        # l'interface par a-coups. Sinon (processus impossible), dans un thread comme avant.
+        model = os.path.join(BASE_DIR, "assets", "f6_model.xlsx")
+        try:
+            self.f6 = f6calc.F6Process(model)
+        except Exception:
+            self.f6 = f6calc.F6Calculator(model)
+            threading.Thread(target=self._load_f6, daemon=True).start()
         self._f6_job = None
 
     def _reset_deck(self):
@@ -713,11 +745,29 @@ class App:
             return
         if not self.f6.ready:
             return
+        if isinstance(self.f6, f6calc.F6Process):
+            self.f6.request(counts, dark_hole, equips)    # resultat lu par _poll_f6
+            return
         try:
             r = self.f6.compute(counts, dark_hole, equips)
         except Exception as e:
             self.f6_total.set(_("Calcul impossible ({error})", error=e))
             return
+        self._show_f6(r)
+
+    def _poll_f6(self):
+        """Messages du processus du tableur : pret (ou erreur), puis chaque resultat."""
+        if not isinstance(self.f6, f6calc.F6Process):
+            return
+        for kind, value, error in self.f6.poll():
+            if kind == "ready":
+                self._update_f6()
+            elif error:
+                self.f6_total.set(_("Calcul impossible ({error})", error=error))
+            elif value:
+                self._show_f6(value)
+
+    def _show_f6(self, r):
         self.f6_total.set(f"Final 6 : {r['Final 6'] * 100:.1f} %")
         for name, v in self.f6_each.items():
             v.set(f"{r[name] * 100:.1f} %")
@@ -736,12 +786,17 @@ class App:
             self.f6_window = f6window.F6Window(
                 self.root, os.path.join(BASE_DIR, "assets", "f6"),
                 on_dark_hole=lambda: self.dark_hole.set(not self.dark_hole.get()),
-                on_close=self._f6_window_closed, geometry=self.cfg.get("f6_window_geometry"))
+                on_close=self._f6_window_closed, geometry=self.cfg.get("f6_window_geometry"),
+                view=self.cfg.get("f6_view"), on_view=self._f6_view_changed)
             self._update_f6_window()
         elif not show and self.f6_window is not None:
             self.f6_window.close()            # rappelle _f6_window_closed
             return
         self.cfg["f6_window"] = show
+        self._save_config()
+
+    def _f6_view_changed(self, view):
+        self.cfg["f6_view"] = view
         self._save_config()
 
     def _f6_window_closed(self, geometry):
@@ -847,6 +902,7 @@ class App:
         self._refresh_history()
         self._refresh_deck()
         self._refresh_passwords()
+        self._poll_f6()
         self.root.after(200, self._tick)
 
     def _save_config(self):
@@ -861,11 +917,16 @@ class App:
             self.cfg["f6_window_geometry"] = self.f6_window.geometry()
             self._save_config()
         self.worker.running = False
+        if isinstance(self.f6, f6calc.F6Process):
+            self.f6.close()
         self.livesplit.close()
         self.root.destroy()
 
 
 def main():
+    # Processus du tableur (F6Process) : dans le .exe, il relance l'exe, qui s'arrete ici.
+    import multiprocessing
+    multiprocessing.freeze_support()
     # .exe sans console : stdout/stderr valent None, ce qui casse la barre de
     # progression (tqdm) de la bibliotheque de formules.
     for name in ("stdout", "stderr"):

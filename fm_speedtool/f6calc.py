@@ -118,3 +118,71 @@ class F6Calculator:
                 v = v[0]
             vals.append(float(v))
         return dict(zip(DUELISTS + ["Final 6"], vals))
+
+
+def _serve(model_path, requests, results):
+    """Processus a part : charge le tableur puis calcule a la demande (le dernier
+    deck demande seulement). Le chargement accapare Python une quinzaine de secondes :
+    dans le processus du logiciel, il figeait l'interface par a-coups d'une seconde."""
+    import sys
+    for name in ("stdout", "stderr"):       # .exe sans console
+        if getattr(sys, name) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+    calc = F6Calculator(model_path)
+    calc.load()
+    results.put(("ready", calc.error, getattr(calc, "traceback", None)))
+    while True:
+        req = requests.get()
+        while not requests.empty():         # demandes en retard : seule la derniere compte
+            req = requests.get()
+        if req is None:
+            return
+        try:
+            results.put(("result", calc.compute(*req), None))
+        except Exception as e:
+            results.put(("result", None, f"{type(e).__name__}: {e}"))
+
+
+class F6Process:
+    """Meme calcul que F6Calculator, dans un processus a part (interface toujours fluide).
+    request() envoie un deck ; poll() rend les messages arrives : ("ready", erreur, trace)
+    puis ("result", {duelliste: proba}, erreur)."""
+
+    def __init__(self, model_path):
+        import multiprocessing
+        ctx = multiprocessing.get_context("spawn")
+        self.requests, self.results = ctx.Queue(), ctx.Queue()
+        self.proc = ctx.Process(target=_serve, args=(model_path, self.requests, self.results), daemon=True)
+        self.proc.start()
+        self.ready = False
+        self.error = None
+        self.traceback = None
+
+    def request(self, counts, dark_hole, equips):
+        self.requests.put((dict(counts), bool(dark_hole), list(equips)))
+
+    def poll(self):
+        import queue
+        out = []
+        while True:
+            try:
+                msg = self.results.get_nowait()
+            except queue.Empty:
+                break
+            if msg[0] == "ready":
+                self.error, self.traceback = msg[1], msg[2]
+                self.ready = msg[1] is None
+            out.append(msg)
+        if not self.ready and self.error is None and not self.proc.is_alive():
+            self.error = "processus du tableur arrete"
+            out.append(("ready", self.error, None))
+        return out
+
+    def close(self):
+        try:
+            self.requests.put(None)
+            self.proc.join(0.5)
+        except Exception:
+            pass
+        if self.proc.is_alive():
+            self.proc.terminate()

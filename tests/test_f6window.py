@@ -19,3 +19,11 @@ def test_images_presentes():
 
 def test_couleur_pourcentage():
     assert f6window.pct_color(0.18) != f6window.pct_color(0.96)
+
+
+def test_reglages_completes():
+    """Reglages enregistres incomplets ou d'une ancienne version : completes, cases inconnues retirees."""
+    v = f6window.clean_view({"layout": "inconnue", "scale": 33, "order": ["mbd", "zzz"], "hidden": ["zzz", "zoa"]})
+    assert v["layout"] == "horizontal" and v["scale"] == 100
+    assert v["order"][0] == "mbd" and sorted(v["order"]) == sorted(f6window.TILES)
+    assert v["hidden"] == ["zoa"] and v["boss_order"] == f6window.BOSSES
