@@ -7,3 +7,9 @@ dist_new/
 captures/
 *.spec
 videos/
+
+# Outils de developpement (gardes hors du depot)
+tests/
+tools/
+build.ps1
+enregistrements/

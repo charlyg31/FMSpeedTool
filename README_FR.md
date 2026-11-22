@@ -81,10 +81,6 @@ Rang estimé comparé au rang affiché par le jeu : exact sur les 34 duels dont 
 lisible (34/34, dont les 5 duels A-TEC contre Pegasus).
 
 
-`tools/extract_video.py` extrait les images du jeu et la ligne surlignée de LiveSplit (tes vrais splits).
-`tools/replay_video.py` rejoue la run dans le moteur. `tools/rank_check.py` compare le rang estimé
-au rang affiché par le jeu.
-
 ## Son du jeu (fusion / équipement)
 
 Chaque action a son bruitage : la fusion fait un souffle large puis une note grave tenue,
@@ -108,15 +104,15 @@ veux ; le deck est complet quand toutes les positions jusqu'au compteur affiché
 moins juste après un retrait). Ensuite seuls les ajouts et retraits le modifient. Les exemplaires
 multiples sont comptés. Le jeu ne défile pas plus vite qu'environ 0,15 s par page, même en appuyant
 sur R1 plus vite : vérifié en direct sur ePSXe, 40/40 cartes à cette vitesse maximale (le logiciel
-analyse 58 à 60 images/s sur cet écran), même résultat qu'une lecture lente. Les types et ATK viennent de la base de YGO-FM-FusionCalc
-(`tools/make_carddb.py`), identique à la liste de yugiohfm.com.
+analyse 58 à 60 images/s sur cet écran), même résultat qu'une lecture lente. Les types et ATK viennent de la base de YGO-FM-FusionCalc,
+identique à la liste de yugiohfm.com.
 
 ## Final 6
 
 Les cartes utiles se remplissent depuis le deck lu (case « Deck lu automatiquement »), ou à la main : le % de victoire contre chaque adversaire et pour l'ensemble
 du Final 6 se recalcule tout seul. Le calcul utilise les formules du tableur
-« FM win rate calculator 2.1 » d'Exarion : `tools/make_f6_model.py` en extrait les cellules utiles
-dans `fm_speedtool/assets/f6_model.xlsx`, et le test redonne au chiffre près les valeurs d'Excel.
+« FM win rate calculator 2.1 » d'Exarion, dont les cellules utiles sont dans
+`fm_speedtool/assets/f6_model.xlsx` (mêmes valeurs qu'Excel, au chiffre près).
 « Dark Hole » se coche si tu commences avec Dark Hole au lieu de Raigeki ; les Raigeki/Dark Hole
 en plus se comptent comme Crush Card (règle du tableur).
 Équipements : un compteur par type, plusieurs exemplaires possibles (Megamorph a sa propre case) ;
@@ -157,9 +153,7 @@ Pour traduire dans une autre langue :
    garde tels quels les `{noms}` entre accolades. Une valeur vide reste en français.
 4. relance le logiciel et choisis la langue.
 
-Les fichiers de langue livrés sont dans `fm_speedtool/lang`. Après un changement de texte dans le
-code, `python tools/make_lang.py` met à jour `template.json` et ajoute les chaînes manquantes
-dans chaque langue.
+Les fichiers de langue livrés sont dans `fm_speedtool/lang`.
 
 ## Options
 
@@ -172,11 +166,7 @@ Tes réglages vont dans `%APPDATA%\FMSpeedTool`.
 ```
 pip install -r requirements.txt
 python fm_speedtool\app.py      # lancer
-python -m pytest tests          # tests
-.\build.ps1                     # construire dist\FMSpeedTool.exe
 ```
-Les tests qui rejouent des captures d'ePSXe ont besoin d'un dossier `captures/` (non publié) et sont
-ignorés sans lui.
 
 ## Remerciements
 

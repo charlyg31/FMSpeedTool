@@ -150,8 +150,7 @@ To add a language:
    `{names}` between braces as they are. An empty value stays in French (the source language).
 4. restart the tool and pick your language.
 
-Shipped language files are in `fm_speedtool/lang`. After changing a text in the code,
-`python tools/make_lang.py` updates `template.json` and adds the missing strings to every language.
+Shipped language files are in `fm_speedtool/lang`.
 
 ## Options
 
@@ -164,11 +163,7 @@ Your settings go to `%APPDATA%\FMSpeedTool`.
 ```
 pip install -r requirements.txt
 python fm_speedtool\app.py      # run
-python -m pytest tests          # tests
-.\build.ps1                     # build dist\FMSpeedTool.exe
 ```
-Tests that replay ePSXe screenshots need a `captures/` folder (not published) and are skipped
-without it.
 
 ## Credits
 
