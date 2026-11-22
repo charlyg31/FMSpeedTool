@@ -25,7 +25,8 @@ NAME_ENTRY_GRACE = 30.0  # l'ecran du nom ne relance pas une run deja demarree
 POST_DUEL_IGNORE = 20.0  # portrait du vaincu dans le dialogue d'apres-duel
 FLASH_GAP = 0.3          # images blanches plus espacees : nouveau flash (video a 4 img/s : 0,25 s)
 GLOW_WITH_FLASH = 0.12   # halo d'equipement : commence avec son propre flash blanc
-REVEAL_WATCH = 0.6       # duree d'observation de la grande carte (ATK qui defile = equipement)
+CHAIN_GAP = 3.0          # = audio.BEFORE : son d'une action precedente dans la fenetre
+REVEAL_WATCH = 0.6      # duree d'observation de la grande carte (ATK qui defile = equipement)
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
 FACE_UP_BACK = 0.45      # score du dos de carte sous lequel la carte est face visible (0,25-0,31)
 PLACE_CONFIRM = 1.2      # la camera zoome sur le terrain dans ce delai si la pose est validee
@@ -116,6 +117,7 @@ class Tracker:
         self.last_flash = -1e9
         self.flash_start = -1e9
         self.reveal_watch = None          # (debut, carte) : fusion ou equipement a confirmer
+        self.last_reveal = -1e9           # derniere fusion/equipement compte
         self.battle = None
         self.manual = {k: 0 for k in fmlogic.RANK_TABLE}
 
@@ -491,6 +493,14 @@ class Tracker:
         """Fusion : flash blanc puis grande carte revelee. Equipement : halo
         violet-magenta, ou flash dore puis grande carte du monstre equipe dont
         l'ATK/DFD defile (verifie sur la video de run)."""
+        if self.battle is not None:
+            # Combat en cours : le flash blanc du coup, et une illustration rose ou violette
+            # sous ce flash (Twin-headed Thunder Dragon), passaient pour une fusion et un
+            # equipement (video d'Aifo0s du 22/11) ; la carte de gauche est alors a la
+            # hauteur d'une revelation. Rien a compter avant le retour du HUD.
+            self.reveal_watch = None
+            self.equip_until = self.reveal_until = 0.0
+            return
         if self.reveal_watch:
             t0, ref = self.reveal_watch
             verdict = vision.card_compare(ref, vision.reveal_card(img))
@@ -536,9 +546,15 @@ class Tracker:
 
     def _count_reveal(self, kind, source="flash"):
         self.reveal_watch = None
+        # Le son ecoute les CHAIN_GAP s d'avant : une action comptee juste avant (fusion en
+        # chaine, equipement puis fusion) y met son propre bruitage, et un decalage de 0,3 s
+        # suffit alors a faire entendre un equipement (video d'Aifo0s du 22/11) : l'image
+        # decide seule.
+        chained = self.last_now - self.last_reveal < CHAIN_GAP
+        self.last_reveal = self.last_now
         # Le son tranche apres un flash (fusion ou equipement dore). Un equipement reconnu a
         # son halo violet est sur : le son ne le contredit pas.
-        if source == "flash" and self.audio is not None and self.audio_clf is not None:
+        if source == "flash" and not chained and self.audio is not None and self.audio_clf is not None:
             # Le son tranche entre fusion et equipement : on attend d'avoir tout le bruitage.
             self.sound_pending.append((self.last_now, kind))
             return
