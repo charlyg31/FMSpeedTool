@@ -34,14 +34,17 @@ LAYOUT_NAMES = {"horizontal": N_("Horizontale (8 cartes par ligne)"), "wide": N_
                 "square": N_("Carree (5 cartes par ligne)"), "vertical": N_("Verticale (3 cartes par ligne)"),
                 "column": N_("Colonne etroite (2 cartes par ligne)"), "side": N_("Boss a gauche, cartes a droite")}
 RANK = "rank"                                              # case du rang du duel en cours
-SHOW_NAMES = (("show_bosses", N_("Boss")), ("show_rank", N_("Rang du duel en cours")), ("show_rates", N_("Taux de victoire")),
+STARS = "stars"                                            # case du total d'etoiles de la run
+SHOW_NAMES = (("show_bosses", N_("Boss")), ("show_rank", N_("Rang du duel en cours")), ("show_stars", N_("Etoiles")),
+              ("show_rates", N_("Taux de victoire")),
               ("show_names", N_("Noms des boss")), ("show_totals", N_("Recap (Dragons, Equipements...)")),
               ("show_cards", N_("Cartes")), ("hide_zero", N_("Masquer les cartes a 0")),
               ("topmost", N_("Toujours au premier plan")))
 SCALES = (50, 60, 75, 90, 100, 125, 150)
 # Fond de la fenetre : vert uni pour le rendre transparent dans OBS (filtre Cle chromatique)
 BACKGROUNDS = {"dark": (BG, N_("Sombre")), "green": ("#00ff00", N_("Vert (cle chromatique OBS)"))}
-DEFAULT_VIEW = {"layout": "horizontal", "scale": 100, "show_bosses": True, "show_rank": True, "show_rates": True,
+DEFAULT_VIEW = {"layout": "horizontal", "scale": 100, "show_bosses": True, "show_rank": True, "show_stars": True,
+                "show_rates": True,
                 "show_names": True, "show_totals": True, "show_cards": True, "hide_zero": False,
                 "topmost": False, "bg": "dark", "order": list(TILES), "boss_order": list(BOSSES), "hidden": [],
                 # Rang du duel en cours : dans la fenetre ou dans sa propre fenetre, couleurs, fond
@@ -112,6 +115,8 @@ class F6Window:
         self.cache = {}
         self.inputs = ({f: 0 for f in fmlogic.F6_FIELDS}, False, [], None)
         self.rank = None              # (rang, score, dans l'objectif, en duel)
+        self.stars = 0                # total d'etoiles de la run
+        self.stars_label = None
         self._rank_drawn = False
         self.drag = None
         self._hover = None
@@ -138,20 +143,27 @@ class F6Window:
         pad = self.s(4)
         main = self.body
         rank_here = v["show_rank"] and not v["rank_window"]
-        if rank_here and boss_cols == 7:
-            boss_cols = 8             # le rang a cote des 7 boss, sur la meme ligne
+        stars_here = v["show_stars"]
+        if boss_cols == 7:
+            boss_cols += rank_here + stars_here   # rang et etoiles a cote des 7 boss, meme ligne
         self.rank_labels = None
+        self.stars_label = None
         self._rank_drawn = False
-        if v["show_bosses"] or rank_here:
+        if v["show_bosses"] or rank_here or stars_here:
             top = tk.Frame(main, bg=BG)
             top.pack(side="left" if side == "left" else "top", anchor="n", padx=(0, pad) if side == "left" else 0,
                      pady=(0, pad))
             shown = [b for b in v["boss_order"] if b not in v["hidden"]] if v["show_bosses"] else []
             if rank_here:
                 shown.append(RANK)
+            if stars_here:
+                shown.append(STARS)
             for i, name in enumerate(shown):
                 if name == RANK:
                     self._rank_tile(top, i // boss_cols, i % boss_cols, pad)
+                    continue
+                if name == STARS:
+                    self._stars_tile(top, i // boss_cols, i % boss_cols, pad)
                     continue
                 f = tk.Frame(top, bg=TILE_BG, highlightbackground=BORDER, highlightthickness=max(1, self.s(2)))
                 f.grid(row=i // boss_cols, column=i % boss_cols, padx=pad // 2 + 1, pady=pad // 2 + 1, sticky="nsew")
@@ -233,6 +245,27 @@ class F6Window:
         for w in (f, inner, band, score):
             self.widgets[w] = ("rank", RANK)
         self.rank_labels = (band, score)
+
+    def _stars_tile(self, parent, row, col, pad):
+        """Case du total d'etoiles (starchips) de la run."""
+        f = tk.Frame(parent, bg=TILE_BG, highlightbackground=BORDER, highlightthickness=max(1, self.s(2)))
+        f.grid(row=row, column=col, padx=pad // 2 + 1, pady=pad // 2 + 1, sticky="nsew")
+        inner = tk.Frame(f, bg=TILE_BG)
+        inner.pack(expand=True, padx=self.s(8), pady=self.s(6))
+        star = tk.Label(inner, text="\u2605", fg="#f2d33a", bg=TILE_BG, font=("Segoe UI Symbol", self.s(24)))
+        star.pack()
+        num = tk.Label(inner, text=str(self.stars), fg=TEXT, bg=TILE_BG, font=("Segoe UI", self.s(18), "bold"))
+        num.pack()
+        for w in (f, inner, star, num):
+            self.widgets[w] = ("stars", STARS)
+        self.stars_label = num
+
+    def set_stars(self, n):
+        """Total d'etoiles de la run (appele a chaque changement)."""
+        self.stars = n
+        lab = self.stars_label
+        if lab is not None and lab.winfo_exists():
+            lab.configure(text=str(n))
 
     def set_rank(self, band, score, ok, in_duel):
         """Rang du duel en cours : vert quand il est dans l'objectif du panneau Rang.
@@ -531,6 +564,10 @@ class F6Window:
                      relief="flat", bd=0, padx=8, pady=2, anchor="w", cursor="hand2")
         if target and target[0] == "rankwin":
             pass
+        elif target and target[0] == "stars":
+            tk.Button(right, text=_("Masquer la case {name}", name=_("Etoiles")),
+                      command=lambda: self._panel_do(lambda: self._set("show_stars", False)), **bopts).pack(
+                fill="x", pady=1)
         elif target and target[0] == "rank":
             tk.Button(right, text=_("Masquer la case {name}", name=_("Rang du duel en cours")),
                       command=lambda: self._panel_do(lambda: self._set("show_rank", False)), **bopts).pack(

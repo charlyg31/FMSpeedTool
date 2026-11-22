@@ -11,6 +11,7 @@ import time
 
 import fmlogic
 import opponents
+import starchips
 import vision
 from i18n import N_, _
 
@@ -26,6 +27,9 @@ POST_DUEL_IGNORE = 20.0  # portrait du vaincu dans le dialogue d'apres-duel
 FLASH_GAP = 0.3          # images blanches plus espacees : nouveau flash (video a 4 img/s : 0,25 s)
 GLOW_WITH_FLASH = 0.12   # halo d'equipement : commence avec son propre flash blanc
 CHAIN_GAP = 3.0          # = audio.BEFORE : son d'une action precedente dans la fenetre
+STARS_BY_RANK = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}   # etoiles gagnees selon la lettre du rang
+STARS_STABLE = 0.4       # total de l'ecran PASSWORD : affiche au moins 0,4 s (il defile pendant un achat)
+STARS_WAIT = 15.0        # victoire : delai pour lire les etoiles sur RESULTS OF DUEL, sinon rang estime
 REVEAL_WATCH = 0.6      # duree d'observation de la grande carte (ATK qui defile = equipement)
 ORIENT_END_WINDOW = 0.2  # pose face cachee : dos de carte vu juste avant de valider
 FACE_UP_BACK = 0.45      # score du dos de carte sous lequel la carte est face visible (0,25-0,31)
@@ -58,6 +62,8 @@ class Tracker:
         self.edges = {}
         base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         self.name_reader, self.portraits = opponents.load(os.path.join(base, "assets"))
+        self.star_reader = starchips.TotalReader(os.path.join(base, "assets"))
+        self.star_read = None             # (total lu sur l'ecran PASSWORD, depuis quand)
         self.last_split = (SPLIT_OTHER, "")
         self.area = vision.GameArea()     # zone de jeu dans la fenetre (bandes noires)
         self.on_password_screen = False   # ecran PASSWORD du jeu affiche
@@ -78,13 +84,17 @@ class Tracker:
     # --- etat ----------------------------------------------------------------
 
     def reset_run(self):
+        self.stars = 0                    # etoiles (starchips) de la run : nouvelle partie = 0
+        self.spoils = 0                   # etoiles vues sur l'ecran RESULTS OF DUEL en cours
+        self.results_at = -1e9
+        self.stars_pending = None         # (etoiles du rang estime, echeance) : victoire non lue
         self.losses = 0
         self.wins = 0
         self.free_wins = 0
         self.history = []                 # un element par duel termine de la run
         self.split_counts = {}            # splits envoyes a LiveSplit pendant la run, par type
         self.skip_splits = {}             # par type : prochains splits a ignorer (duels rejoues)
-        self.save_point = None            # ({type: splits atteints}, victoires, defaites) a la sauvegarde
+        self.save_point = None            # ({type: splits atteints}, victoires, defaites, etoiles) a la sauvegarde
         self.pending_split = None         # (message, echeance) : split au RESULTS OF DUEL
         self.in_duel = False
         self.free_duel = False            # mode du duel en cours / a venir
@@ -209,6 +219,8 @@ class Tracker:
             if self.in_duel and not hud_now:
                 self._end_duel(self.decided, now)   # duel quitte sans attendre RESULTS
             self._load()
+        self._spoils(img, matches, now)
+        self._star_total(img, matches, now)
 
         self.on_password_screen = "password_screen" in matches
         if self.deck is not None:
@@ -263,6 +275,44 @@ class Tracker:
                 if self.options["split_farm_v2"]:
                     self._split(SPLIT_FARM, _("Fin du farm (retour au menu)"))
 
+    def _spoils(self, img, matches, now):
+        """Etoiles gagnees : icones a droite de SPOILS sur RESULTS OF DUEL (1 en rang D a 5 en S).
+        On garde le maximum vu tant que l'ecran est la (un fondu en montre moins), compte a sa
+        disparition."""
+        if "results" in matches:
+            self.spoils = max(self.spoils, vision.spoils_stars(img))
+            self.results_at = now
+        elif self.spoils and now - self.results_at > 1.0:
+            n, self.spoils, self.stars_pending = self.spoils, 0, None
+            self.add_stars(n, _("fin de duel"))
+        if self.stars_pending and now > self.stars_pending[1]:
+            n, self.stars_pending = self.stars_pending[0], None
+            if n:
+                self.add_stars(n, _("rang estime, ecran des resultats non lu"))
+
+    def _star_total(self, img, matches, now):
+        """Ecran PASSWORD : le jeu affiche le total d'etoiles ; il fait foi (achats compris)."""
+        if "password_screen" not in matches:
+            self.star_read = None
+            return
+        v = self.star_reader.read(img)
+        if v is None:
+            return
+        if self.star_read is None or self.star_read[0] != v:
+            self.star_read = (v, now)
+            return
+        if now - self.star_read[1] < STARS_STABLE or v == self.stars:
+            return
+        diff, self.stars = v - self.stars, v
+        if diff < 0:
+            self.on_event("stars", _("Achat : {n} etoiles, total {total}", n=-diff, total=v))
+        else:
+            self.on_event("stars", _("Etoiles lues (ecran PASSWORD) : total {total}", total=v))
+
+    def add_stars(self, n, why):
+        self.stars = max(0, self.stars + n)
+        self.on_event("stars", _("Etoiles {n} ({why}) : total {total}", n=f"{n:+d}", why=why, total=self.stars))
+
     def _split(self, kind, msg, opponent=""):
         """Signale un split ; last_split dit lequel (le script LiveSplit filtre dessus)."""
         if self.skip_splits.get(kind):
@@ -282,7 +332,7 @@ class Tracker:
     def _save(self):
         """SAVE COMPLETE! : retient ou en est la run (splits deja faits dans le jeu)."""
         reached = self._reached()
-        self.save_point = (reached, self.wins, self.losses)
+        self.save_point = (reached, self.wins, self.losses, self.stars)
         self.on_event("save", _("Sauvegarde : {n} split(s) faits a ce point", n=sum(reached.values())))
 
     def _load(self):
@@ -292,7 +342,10 @@ class Tracker:
         if self.save_point is None:
             self.on_event("info", _("Chargement : aucune sauvegarde vue pendant cette run, rien a corriger"))
             return
-        reached, self.wins, self.losses = self.save_point
+        reached, self.wins, self.losses, stars = self.save_point
+        if stars != self.stars:
+            self.stars = stars
+            self.on_event("stars", _("Etoiles : {total} (retour a la sauvegarde)", total=stars))
         self.pending_split = None
         extra = {k: n - reached.get(k, 0) for k, n in self.split_counts.items()
                  if n - reached.get(k, 0) > 0}
@@ -461,6 +514,8 @@ class Tracker:
                              "stats": s})
         if result == "win":
             self.wins += 1
+            # Etoiles lues sur RESULTS OF DUEL ; s'il n'est pas lu, celles du rang estime.
+            self.stars_pending = (STARS_BY_RANK.get(fmlogic.band(total)[:1], 0), now + STARS_WAIT)
             if (free and self.options.get("all_duelists") and self.opponent in ALL_DUELISTS_FREE
                     and self.opponent not in self.free_counted):
                 # All Duelists : DMK et Heishin 1 se battent en Free Duel, 1re victoire = split.

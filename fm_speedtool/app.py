@@ -28,7 +28,7 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
-VERSION = "1.25"                  # affichee dans le titre de la fenetre
+VERSION = "1.26"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -177,6 +177,12 @@ class App:
         self.tracker = tracker.Tracker(self.digits, self.builtin, None,
                                        lambda k, m: self.worker.on_event(k, m), deck=self.deck)
         self.tracker.options.update(self.cfg["options"])
+        # Etoiles de la run : gardees d'une session a l'autre (une nouvelle partie remet a 0).
+        try:
+            self.tracker.stars = max(0, int(self.cfg.get("stars", 0)))
+        except (TypeError, ValueError):
+            self.tracker.stars = 0
+        self._stars_shown = None
         # Cadrage de l'image (ePSXe et PS2) : cale sur l'ecran titre ou du deck, garde d'une
         # session a l'autre. En attendant ces ecrans, calage en hauteur sur le panneau
         # LP/COM/YOU ou le menu titre, pour ePSXe aussi (fenetre avec bordures, logiciel
@@ -561,6 +567,14 @@ class App:
     # --- journal ---------------------------------------------------------------------
 
     def _build_log(self, box):
+        # Total d'etoiles (starchips) de la run : gagnees en fin de duel, achats deduits ;
+        # lu directement sur l'ecran PASSWORD du jeu. + / - pour corriger a la main.
+        stars = ttk.Frame(box)
+        stars.pack(fill="x", pady=(0, 4))
+        self.stars_text = tk.StringVar(value="")
+        ttk.Label(stars, textvariable=self.stars_text, font=("Segoe UI", 13, "bold")).pack(side="left")
+        ttk.Button(stars, text="+", width=2, command=lambda: self._adjust_stars(1)).pack(side="right")
+        ttk.Button(stars, text="-", width=2, command=lambda: self._adjust_stars(-1)).pack(side="right")
         ttk.Label(box, text=_("Rang de chaque duel de la run")).pack(anchor="w")
         cols = ("n", "adv", "mode", "res", "rang")
         self.hist = ttk.Treeview(box, columns=cols, show="headings", height=8)
@@ -572,6 +586,21 @@ class App:
         ttk.Label(box, text=_("Journal")).pack(anchor="w", pady=(4, 0))
         self.log = tk.Listbox(box, height=6)
         self.log.pack(fill="both", expand=True)
+
+    def _adjust_stars(self, d):
+        with self.worker.lock:
+            self.tracker.stars = max(0, self.tracker.stars + d)
+
+    def _refresh_stars(self):
+        n = self.tracker.stars
+        if n == self._stars_shown:
+            return
+        self._stars_shown = n
+        self.stars_text.set("\u2605 " + _("Etoiles : {n}", n=n))
+        self.cfg["stars"] = n
+        self._save_config()
+        if self.f6_window is not None:
+            self.f6_window.set_stars(n)
 
     def _refresh_history(self):
         h = self.tracker.history
@@ -856,6 +885,7 @@ class App:
                 on_dark_hole=lambda: self.dark_hole.set(not self.dark_hole.get()),
                 on_close=self._f6_window_closed, geometry=self.cfg.get("f6_window_geometry"),
                 view=self.cfg.get("f6_view"), on_view=self._f6_view_changed)
+            self.f6_window.set_stars(self.tracker.stars)
             self._update_f6_window()
         elif not show and self.f6_window is not None:
             self.f6_window.close()            # rappelle _f6_window_closed
@@ -960,6 +990,7 @@ class App:
                             com_deck=val(hud["com_deck"]), you_deck=val(hud["you_deck"])))
         self._refresh_rank()
         self._refresh_history()
+        self._refresh_stars()
         self._refresh_deck()
         self._refresh_passwords()
         self._poll_f6()

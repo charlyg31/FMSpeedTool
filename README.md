@@ -138,6 +138,14 @@ On the game's PASSWORD screen, the page is replaced by the codes of useful cards
 in stars; the normal page comes back when you leave the screen. The "Useful passwords" button shows
 it at any time.
 
+## Star chips
+
+The run's star chip total is shown at the top of the duel history and in a tile of the Final 6
+window (can be hidden). Each win adds the stars shown on the RESULTS OF DUEL screen (rank D 1,
+C 2, B 3, A 4, S 5; estimated rank if it is not read). On the PASSWORD screen, the total shown by
+the game wins: purchases are taken off by themselves. A new game resets it to 0, loading a save
+goes back to the save's total; + / − to fix it by hand.
+
 ## Language / translation
 
 Pick the language at the bottom of the page ("Langue / Language"); it applies after a restart.

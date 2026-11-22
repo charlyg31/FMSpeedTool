@@ -141,6 +141,14 @@ Sur l'écran PASSWORD du jeu, la page est remplacée par les codes des cartes ut
 étoiles ; la page normale revient quand tu quittes l'écran. Bouton « Mots de passe utiles » pour
 l'afficher à tout moment.
 
+## Étoiles
+
+Le total d'étoiles de la run s'affiche en haut de l'historique des duels et dans une case de la
+fenêtre Final 6 (masquable). Chaque victoire ajoute les étoiles montrées par l'écran RESULTS OF DUEL
+(rang D 1, C 2, B 3, A 4, S 5 ; rang estimé s'il n'est pas lu). Sur l'écran PASSWORD, le total
+affiché par le jeu fait foi : les achats sont déduits tout seuls. Une nouvelle partie remet à 0,
+un chargement revient au total de la sauvegarde ; + / − pour corriger à la main.
+
 ## Langue / traduction
 
 La langue se choisit en bas de la page (« Langue / Language ») et s'applique au redémarrage.

@@ -703,6 +703,26 @@ def equip_glow(img):
     return int(((red > 150) & (b > 150) & (g < red - 50) & (g < b - 50)).sum())
 
 
+SPOILS_RECT = (295, 375, 325, 50)    # etoiles gagnees, a droite de SPOILS (RESULTS OF DUEL)
+SPOILS_X0, SPOILS_STEP = 16, 40.33   # position de la 1re etoile dans la zone, pas entre etoiles
+
+
+def spoils_stars(img):
+    """Nombre d'etoiles (starchips) gagnees sur l'ecran RESULTS OF DUEL : 1 (rang D) a 5 (S).
+    Icones jaunes de ~26 px a intervalles fixes ; pendant un fondu on en voit moins, jamais plus."""
+    hsv = cv2.cvtColor(crop(img, SPOILS_RECT), cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 0] >= 18) & (hsv[..., 0] <= 40) & (hsv[..., 1] > 140) & (hsv[..., 2] > 90)).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    _, _, st, _ = cv2.connectedComponentsWithStats(m)
+    n = 0
+    for x, y, w, h, area in st[1:]:
+        k = (x - SPOILS_X0) / SPOILS_STEP
+        if (220 <= area <= 480 and 20 <= w <= 34 and 20 <= h <= 34 and 6 <= y <= 18
+                and abs(k - round(k)) * SPOILS_STEP < 6):
+            n += 1
+    return min(n, 5)
+
+
 def white_flash(img):
     """Nombre de pixels quasi blancs au centre (flash de fusion/equipement)."""
     return int((crop(img, FLASH_RECT).min(axis=2) > 225).sum())
