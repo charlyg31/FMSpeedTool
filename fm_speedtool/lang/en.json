@@ -3,7 +3,7 @@
  "author": "Charlyg31",
  "strings": {
   "LiveSplit injoignable (serveur TCP demarre ?)": "LiveSplit unreachable (is the TCP server started?)",
-  "FM Speed Tool - Forbidden Memories (analyse d'image)": "FM Speed Tool - Forbidden Memories (image analysis)",
+  "FM Speed Tool v{version} - Forbidden Memories (analyse d'image)": "FM Speed Tool v{version} - Forbidden Memories (image analysis)",
   "Duel en cours - rang": "Current duel - rank",
   "Historique des duels": "Duel history",
   "Options": "Options",
