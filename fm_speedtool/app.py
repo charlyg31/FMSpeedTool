@@ -28,7 +28,7 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
-VERSION = "1.25"                  # affichee dans le titre de la fenetre
+VERSION = "1.26"                  # affichee en bas de la fenetre (pas dans le titre, fixe pour OBS)
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -152,13 +152,13 @@ class Worker(threading.Thread):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title(f"FM Speed Tool v{VERSION}")
+        root.title("FM Speed Tool")
         root.geometry("1440x975")
         root.minsize(320, 300)
         os.makedirs(APP_DIR, exist_ok=True)
         self.cfg = load_config()
         i18n.set_language(self.cfg.get("language") or i18n.system_language())
-        root.title(_("FM Speed Tool v{version} - Forbidden Memories (analyse d'image)", version=VERSION))
+        root.title(_("FM Speed Tool - Forbidden Memories (analyse d'image)"))
         try:
             self.bridge = livesplit_bridge.Bridge()
         except OSError:
@@ -371,6 +371,8 @@ class App:
             v.trace_add("write", lambda *_a: self._apply_modules())
             ttk.Checkbutton(shown, text=text, variable=v).pack(side="left", padx=2)
             self.module_vars[key] = v
+        # Version : ici, pas dans le titre (OBS capture la fenetre par son titre exact).
+        ttk.Label(shown, text=f"v{VERSION}", foreground="#888").pack(side="right", padx=4)
         # Source du jeu (en haut a droite) : fenetre ePSXe, ou fenetre qui affiche la
         # PS2 (carte d'acquisition, projecteur OBS...).
         self.source = tk.StringVar(value=self.cfg.get("source", "epsxe"))
