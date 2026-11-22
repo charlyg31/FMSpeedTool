@@ -198,8 +198,9 @@ class F6Window:
             # taille (source OBS stable).
             n = len([k for k in v["order"] if k not in v["hidden"]])
             cw, ch = self.s(CARD_W) + 4, self.s(CARD_H) + 4
-            self.grid = tk.Frame(main, bg=BG, width=max(1, min(n, card_cols)) * cw,
-                                 height=max(1, -(-n // card_cols)) * ch)
+            self._cell = (cw, ch)
+            self._grid_w = max(1, min(n, card_cols)) * cw
+            self.grid = tk.Frame(main, bg=BG, width=self._grid_w, height=max(1, -(-n // card_cols)) * ch)
             self.grid.grid_propagate(False)
             self.grid.pack(anchor="w")
             self.card_cols = card_cols
@@ -384,10 +385,16 @@ class F6Window:
                     self.widgets.pop(lab, None)
                     lab.destroy()
                 self.tiles = {}
+                cols, (cw, ch) = self.card_cols, self._cell
                 for i, key in enumerate(shown):
                     lab = tk.Label(self.grid, bg=self.bg, bd=0, highlightbackground=BORDER, highlightthickness=1,
                                    cursor="hand2" if key == RAIGEKI else "fleur")
-                    lab.grid(row=i // self.card_cols, column=i % self.card_cols, padx=1, pady=1)
+                    # Cartes centrees sous les boss : une ligne incomplete (cartes a 0 masquees)
+                    # est centree dans la zone, au lieu d'etre collee a gauche.
+                    row, col = divmod(i, cols)
+                    in_row = min(cols, len(shown) - row * cols)
+                    x0 = (self._grid_w - in_row * cw) / 2
+                    lab.place(x=int(x0 + col * cw) + 1, y=row * ch + 1)
                     self.widgets[lab] = ("card", key)
                     self._bind_card(lab)
                     self.tiles[key] = lab
