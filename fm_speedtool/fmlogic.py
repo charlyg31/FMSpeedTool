@@ -1,7 +1,5 @@
 """Regles du jeu : calcul du rang de duel et code de partage du calculateur Final 6."""
 
-import base64
-import json
 
 from i18n import N_, _
 
@@ -96,7 +94,7 @@ def advice(stats, target="A-TEC"):
     return "\n".join(lines)
 
 
-# --- Calculateur Final 6 (fusion.lukadevv.com/win-rate) ----------------------
+# --- Final 6 (tableur d'Exarion) ---------------------------------------------------
 
 F6_FIELDS = ["dragonsUnder1600", "dragons1600Plus", "thunderDragons", "thunders", "umi",
              "wsr", "mm", "mbd", "skullKnight", "darkMagician", "zoa", "ushiOni",
@@ -121,47 +119,3 @@ F6_LABELS = {
     "ushiOni": "Ushi Oni", "mountain": "Mountain", "fields": "Fields (Forest/Wasteland/Sogen)",
     "dcj": "Dragon Capture Jar", "ath": "Acid Trap Hole", "crushCard": "Crush Card",
 }
-
-_B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def _b62(n):
-    s = ""
-    while True:
-        s = _B62[n % 62] + s
-        n //= 62
-        if n == 0:
-            return s
-
-
-def _compress_json(values):
-    """Format compress-json utilise par le site (liste de valeurs + index)."""
-    pool, index = [], {}
-
-    def add(key):
-        if key not in index:
-            index[key] = len(pool)
-            pool.append(key)
-        return index[key]
-
-    refs = []
-    for v in values:
-        if isinstance(v, dict):
-            refs.append(add("o|"))
-        else:
-            refs.append(add("n|" + _b62(int(v))))
-    root = add("a|" + "|".join(_b62(r) for r in refs))
-    return [pool, _b62(root)]
-
-
-def f6_share_code(counts, dark_hole, equips):
-    """counts: dict F6_FIELDS -> int ; equips: liste de noms (max 6)."""
-    eq = [F6_EQUIPS.index(e) for e in equips[:6]]
-    eq += [6] * (6 - len(eq))
-    values = [int(counts.get(f, 0)) for f in F6_FIELDS] + [1 if dark_hole else 0] + eq + [{}]
-    raw = json.dumps(_compress_json(values), separators=(",", ":")).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def f6_url(counts, dark_hole, equips):
-    return "https://fusion.lukadevv.com/win-rate?deck=" + f6_share_code(counts, dark_hole, equips)

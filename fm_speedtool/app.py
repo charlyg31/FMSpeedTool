@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import tkinter as tk
-import webbrowser
 from tkinter import messagebox, ttk
 
 import capture
@@ -191,6 +190,10 @@ class App:
 
         page = self.page = ttk.Frame(root, padding=6)
         page.pack(fill="both", expand=True)
+        # Fond de la fenetre = fond des panneaux : une zone qui apparait (fenetre agrandie)
+        # n'est plus noire le temps que les panneaux s'y dessinent.
+        root.configure(bg=ttk.Style(root).lookup("TFrame", "background") or "#f0f0f0")
+        self._frame_background(root)
         page.columnconfigure(0, weight=2)
         page.columnconfigure(1, weight=2)
         page.columnconfigure(2, weight=3)
@@ -222,6 +225,7 @@ class App:
 
     def _apply_modules(self, resize=True):
         """Affiche ou cache les modules choisis ; la fenetre se resserre sur ceux qui restent."""
+        self._finish_resize()             # changement precedent pas fini : termine d'abord
         shown = {k: v.get() for k, v in self.module_vars.items()}
         if not any(shown[k] for k in self.COLUMN_WEIGHTS):
             shown["rank"] = True              # au moins un module
@@ -258,11 +262,72 @@ class App:
             # l'agrandissement) : elle remonte / se decale juste assez.
             x = max(0, min(self.root.winfo_x(), self.root.winfo_screenwidth() - w))
             y = max(0, min(self.root.winfo_y(), self.root.winfo_screenheight() - h - 48))
-            self._grid_modules(shown)
-            # Apres le placement des panneaux (sinon Tk remet l'ancienne taille), meme passage.
-            self.root.after_idle(lambda: self.root.geometry(f"{w}x{h}+{x}+{y}"))
+            if not self._resize_hidden(shown, w, h, x, y):
+                self._grid_modules(shown)
+                # Apres le placement des panneaux (sinon Tk remet l'ancienne taille), meme passage.
+                self.root.after_idle(lambda: self.root.geometry(f"{w}x{h}+{x}+{y}"))
         else:
             self._grid_modules(shown)
+
+    @staticmethod
+    def _frame_background(root):
+        """Couleur de fond de la fenetre-cadre de Windows (sans, une zone qui apparait quand
+        la fenetre grandit est noire le temps que Tk la dessine) : gris des panneaux."""
+        try:
+            import ctypes
+            root.update_idletasks()
+            rgb = [v // 257 for v in root.winfo_rgb(root.cget("bg"))]
+            brush = ctypes.windll.gdi32.CreateSolidBrush(rgb[0] | (rgb[1] << 8) | (rgb[2] << 16))
+            user32 = ctypes.windll.user32
+            user32.SetClassLongPtrW.restype = ctypes.c_void_p
+            user32.SetClassLongPtrW.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p)
+            user32.SetClassLongPtrW(ctypes.c_void_p(int(root.wm_frame(), 16)), -10, brush)  # GCLP_HBRBACKGROUND
+        except (AttributeError, OSError, ValueError, tk.TclError):
+            pass
+
+    def _resize_hidden(self, shown, w, h, x, y):
+        """Panneaux et taille changes en etapes propres (sans panneaux tasses) : la fenetre
+        change d'abord de taille quand elle grandit (les panneaux deja visibles prennent la
+        place un instant), puis le panneau arrive deja a sa taille ; quand elle rapetisse, le
+        panneau part d'abord, puis la fenetre se resserre. La zone qui apparait a la couleur
+        des panneaux (fond de la fenetre), et non plus le noir de Windows."""
+        grows = w > self.root.winfo_width() or h > self.root.winfo_height()
+        if not grows:
+            self._grid_modules(shown)
+            self.root.update_idletasks()
+            self.root.geometry(f"{w}x{h}+{x}+{y}")
+            return True
+        # Fenetre qui grandit : Windows applique la nouvelle taille un peu apres. On l'attend
+        # par la boucle normale (0,1 s au plus) avant de placer le panneau. (Attendue sur place,
+        # en laissant passer les evenements, un 2e clic sur une case s'executait au milieu et
+        # laissait la fenetre a moitie changee.)
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+        self._pending_resize = {"shown": shown, "geo": (w, h, x, y), "tries": 0, "job": None}
+        self._poll_resize()
+        return True
+
+    def _poll_resize(self):
+        p = getattr(self, "_pending_resize", None)
+        if not p:
+            return
+        w, h = p["geo"][:2]
+        if (self.root.winfo_width() == w and self.root.winfo_height() == h) or p["tries"] >= 20:
+            self._finish_resize()
+        else:
+            p["tries"] += 1
+            p["job"] = self.root.after(5, self._poll_resize)
+
+    def _finish_resize(self):
+        """Place le panneau qui arrive (taille atteinte, ou nouveau clic sur une case)."""
+        p, self._pending_resize = getattr(self, "_pending_resize", None), None
+        if not p:
+            return
+        if p["job"] is not None:
+            self.root.after_cancel(p["job"])
+        w, h, x, y = p["geo"]
+        self._grid_modules(p["shown"])
+        self.root.update_idletasks()
+        self.root.geometry(f"{w}x{h}+{x}+{y}")       # Tk garde cette taille
 
     def _grid_modules(self, shown):
         for col, (key, weight) in enumerate(self.COLUMN_WEIGHTS.items()):
@@ -646,9 +711,7 @@ class App:
         self.f6_window_text = tk.StringVar(value=_("Afficher la fenetre Final 6"))
         ttk.Button(links, textvariable=self.f6_window_text,
                    command=lambda: self.f6_window_var.set(not self.f6_window_var.get())).pack(
-            side="left", fill="x", expand=True, padx=(0, 2))
-        ttk.Button(links, text=_("Ouvrir aussi sur fusion.lukadevv.com"), command=self._open_f6).pack(
-            side="left", fill="x", expand=True, padx=(2, 0))
+            side="left", fill="x", expand=True)
         self.f6_window = None
         self._f6_result = None
         self.f6_window_var.trace_add("write", lambda *_a: self._show_f6_window(self.f6_window_var.get()))
@@ -811,14 +874,6 @@ class App:
         self._save_config()
         if self.f6_window_var.get():
             self.f6_window_var.set(False)
-
-    def _open_f6(self):
-        counts, dark_hole, equips = self._f6_inputs()
-        url = fmlogic.f6_url(counts, dark_hole, fmlogic.best_equips(equips))
-        self.root.clipboard_clear()
-        self.root.clipboard_append(url)
-        webbrowser.open("https://fusion.lukadevv.com/win-rate")
-        self._log(_("Lien Final 6 copie : clique IMPORT sur la page et colle (Ctrl+V)"))
 
     # --- mots de passe (ecran PASSWORD du jeu) ----------------------------------------
 

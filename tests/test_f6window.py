@@ -27,3 +27,12 @@ def test_reglages_completes():
     assert v["layout"] == "horizontal" and v["scale"] == 100
     assert v["order"][0] == "mbd" and sorted(v["order"]) == sorted(f6window.TILES)
     assert v["hidden"] == ["zoa"] and v["boss_order"] == f6window.BOSSES
+
+
+def test_reglages_du_rang():
+    """Couleurs, fond et position de la fenetre du rang : valeurs invalides remplacees."""
+    v = f6window.clean_view({"rank_color": "rouge", "score_color": "#00FFaa", "rank_bg": "bleu",
+                             "rank_scale": 7, "rank_pos": "+12-30", "rank_window": True})
+    assert v["rank_color"] == f6window.DEFAULT_VIEW["rank_color"] and v["score_color"] == "#00FFaa"
+    assert v["rank_bg"] == "dark" and v["rank_scale"] == 100 and v["rank_pos"] == "+12-30"
+    assert f6window.clean_view({"rank_pos": "800x600"})["rank_pos"] == ""

@@ -6,7 +6,9 @@ cases masquees une par une ; les cartes se deplacent en les faisant glisser sur 
 (les boss restent dans l'ordre du jeu)."""
 
 import os
+import re
 import tkinter as tk
+from tkinter import colorchooser
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
 
@@ -41,7 +43,11 @@ SCALES = (50, 60, 75, 90, 100, 125, 150)
 BACKGROUNDS = {"dark": (BG, N_("Sombre")), "green": ("#00ff00", N_("Vert (cle chromatique OBS)"))}
 DEFAULT_VIEW = {"layout": "horizontal", "scale": 100, "show_bosses": True, "show_rank": True, "show_rates": True,
                 "show_names": True, "show_totals": True, "show_cards": True, "hide_zero": False,
-                "topmost": False, "bg": "dark", "order": list(TILES), "boss_order": list(BOSSES), "hidden": []}
+                "topmost": False, "bg": "dark", "order": list(TILES), "boss_order": list(BOSSES), "hidden": [],
+                # Rang du duel en cours : dans la fenetre ou dans sa propre fenetre, couleurs, fond
+                "rank_window": False, "rank_color": TEXT, "score_color": DIM, "ok_color": "#5ac46e",
+                "ok_on": True, "rank_bg": "dark", "rank_scale": 100, "rank_pos": ""}
+COLOR_KEYS = ("rank_color", "score_color", "ok_color")
 
 
 def tile_file(key):
@@ -68,6 +74,15 @@ def clean_view(view):
         v["bg"] = "dark"
     if v["scale"] not in SCALES:
         v["scale"] = 100
+    if v["rank_bg"] not in BACKGROUNDS:
+        v["rank_bg"] = "dark"
+    if v["rank_scale"] not in SCALES:
+        v["rank_scale"] = 100
+    for key in COLOR_KEYS:
+        if not (isinstance(v[key], str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v[key])):
+            v[key] = DEFAULT_VIEW[key]
+    if not (isinstance(v["rank_pos"], str) and re.fullmatch(r"([+-]\d+){2}|", v["rank_pos"])):
+        v["rank_pos"] = ""
     return v
 
 
@@ -101,6 +116,7 @@ class F6Window:
         self.drag = None
         self._hover = None
         self.body = None
+        self.rank_win = None          # fenetre a part du rang (reglage "rank_window")
         self.build()
 
     # --- construction -----------------------------------------------------------------------
@@ -109,30 +125,29 @@ class F6Window:
         return max(1, int(round(n * self.view["scale"] / 100)))
 
     def build(self):
-        """(Re)construit la fenetre selon les reglages ; la taille suit le contenu."""
+        """(Re)construit la fenetre selon les reglages ; la taille suit le contenu.
+        Le nouveau contenu est prepare hors de l'ecran puis echange avec l'ancien d'un coup :
+        detruit d'abord, la fenetre restait noire le temps de refaire les images."""
         v = self.view
         self.bg = BG = BACKGROUNDS[v["bg"]][0]
-        self.win.configure(bg=BG)
-        self.win.attributes("-topmost", bool(v["topmost"]))
-        if self.body is not None:
-            self.body.destroy()
+        old = self.body
         self.body = tk.Frame(self.win, bg=BG)
-        self.body.pack(padx=self.s(10), pady=self.s(10))
         self.widgets = {}        # widget -> ("boss" | "card", cle) pour glisser / clic droit
         self.boss_pct, self.boss_tiles, self.tiles, self.totals = {}, {}, {}, {}
         boss_cols, card_cols, side = LAYOUTS[v["layout"]]
         pad = self.s(4)
         main = self.body
-        if v["show_rank"] and boss_cols == 7:
+        rank_here = v["show_rank"] and not v["rank_window"]
+        if rank_here and boss_cols == 7:
             boss_cols = 8             # le rang a cote des 7 boss, sur la meme ligne
         self.rank_labels = None
         self._rank_drawn = False
-        if v["show_bosses"] or v["show_rank"]:
+        if v["show_bosses"] or rank_here:
             top = tk.Frame(main, bg=BG)
             top.pack(side="left" if side == "left" else "top", anchor="n", padx=(0, pad) if side == "left" else 0,
                      pady=(0, pad))
             shown = [b for b in v["boss_order"] if b not in v["hidden"]] if v["show_bosses"] else []
-            if v["show_rank"]:
+            if rank_here:
                 shown.append(RANK)
             for i, name in enumerate(shown):
                 if name == RANK:
@@ -190,11 +205,19 @@ class F6Window:
             self.card_cols = card_cols
         else:
             self.grid = None
-        self._bind_all(self.win)
+        self._bind_all(self.body)
         self._last_state = None
         self.update(*self.inputs, force=True)
         if self.rank:
             self.set_rank(*self.rank)
+        self.body.update_idletasks()        # tout est pret avant l'echange
+        self.win.configure(bg=BG)
+        self.win.attributes("-topmost", bool(v["topmost"]))
+        if old is not None:
+            old.destroy()
+        self.body.pack(padx=self.s(10), pady=self.s(10))
+        self.win.bind("<Button-3>", self._menu)
+        self._sync_rank_window()
 
     def _rank_tile(self, parent, row, col, pad):
         """Case du rang presume du duel en cours (meme rang que le panneau Rang)."""
@@ -202,15 +225,13 @@ class F6Window:
         f.grid(row=row, column=col, padx=pad // 2 + 1, pady=pad // 2 + 1, sticky="nsew")
         inner = tk.Frame(f, bg=TILE_BG)
         inner.pack(expand=True, padx=self.s(8), pady=self.s(6))   # centre dans la hauteur de la ligne
-        title = tk.Label(inner, text=_("Dernier duel"), fg=DIM, bg=TILE_BG, font=("Segoe UI", self.s(10), "bold"))
-        title.pack()
-        band = tk.Label(inner, text="-", fg=TEXT, bg=TILE_BG, font=("Segoe UI", self.s(22), "bold"))
+        band = tk.Label(inner, text="-", fg=self.view["rank_color"], bg=TILE_BG, font=("Segoe UI", self.s(22), "bold"))
         band.pack()
-        score = tk.Label(inner, text="", fg=DIM, bg=TILE_BG, font=("Segoe UI", self.s(15), "bold"))
+        score = tk.Label(inner, text="", fg=self.view["score_color"], bg=TILE_BG, font=("Segoe UI", self.s(15), "bold"))
         score.pack()
-        for w in (f, inner, title, band, score):
+        for w in (f, inner, band, score):
             self.widgets[w] = ("rank", RANK)
-        self.rank_labels = (title, band, score)
+        self.rank_labels = (band, score)
 
     def set_rank(self, band, score, ok, in_duel):
         """Rang du duel en cours : vert quand il est dans l'objectif du panneau Rang.
@@ -218,14 +239,88 @@ class F6Window:
         if (band, score, ok, in_duel) == self.rank and self._rank_drawn:
             return
         self.rank = (band, score, ok, in_duel)
-        self._rank_drawn = bool(self.rank_labels)
-        if not self.rank_labels or not self.win.winfo_exists():
+        labels = [lab for lab in (self.rank_labels, getattr(self, "rank_win_labels", None)) if lab]
+        self._rank_drawn = bool(labels)
+        if not self.win.winfo_exists():
             return
-        title, b, s = self.rank_labels
-        title.configure(text=_("Duel en cours") if in_duel else _("Dernier duel"))
-        color = "#5ac46e" if ok else TEXT
-        b.configure(text=band, fg=color)
-        s.configure(text=str(score), fg=color if ok else DIM)
+        v = self.view
+        special = ok and v["ok_on"]
+        for b, s in labels:
+            if b.winfo_exists():
+                b.configure(text=band, fg=v["ok_color"] if special else v["rank_color"])
+                s.configure(text=str(score), fg=v["ok_color"] if special else v["score_color"])
+
+    # --- rang dans sa propre fenetre (a capturer seul dans OBS) ---------------------------------
+
+    def _sync_rank_window(self):
+        """Cree, refait ou ferme la fenetre a part du rang selon les reglages."""
+        v = self.view
+        want = v["show_rank"] and v["rank_window"]
+        if not want:
+            self._close_rank_window()
+            return
+        if self.rank_win is None or not self.rank_win.winfo_exists():
+            rw = self.rank_win = tk.Toplevel(self.win.master)
+            rw.title(_("Rang du duel en cours"))
+            rw.protocol("WM_DELETE_WINDOW", self._rank_window_closed)
+            if v["rank_pos"]:
+                rw.geometry(v["rank_pos"])
+            rw.bind("<Configure>", lambda e: self._rank_window_moved())
+            self._rank_body = None
+        rw = self.rank_win
+        bg = BACKGROUNDS[v["rank_bg"]][0]
+        k = v["rank_scale"] / 100
+        rw.configure(bg=bg)
+        rw.attributes("-topmost", bool(v["topmost"]))
+        old = self._rank_body
+        body = self._rank_body = tk.Frame(rw, bg=bg)
+        band = tk.Label(body, text="-", bg=bg, font=("Segoe UI", max(8, int(40 * k)), "bold"))
+        band.pack(padx=int(18 * k), pady=(int(10 * k), 0))
+        score = tk.Label(body, text="", bg=bg, font=("Segoe UI", max(8, int(26 * k)), "bold"))
+        score.pack(pady=(0, int(10 * k)))
+        for w in (rw, body, band, score):
+            w.bind("<Button-3>", self._rank_menu)
+        if old is not None:
+            old.destroy()
+        body.pack(expand=True)
+        rw.geometry("")
+        self.rank_win_labels = (band, score)
+        self._rank_drawn = False
+        if self.rank:
+            self.set_rank(*self.rank)
+        else:
+            band.configure(fg=v["rank_color"])
+
+    def _rank_menu(self, event):
+        self._open_panel(event.x_root, event.y_root, ("rankwin", RANK))
+        return "break"
+
+    def _rank_window_moved(self):
+        rw = self.rank_win
+        if rw is not None and rw.winfo_exists():
+            pos = rw.geometry()
+            pos = pos[pos.find("+"):] if "+" in pos else ""
+            if pos and pos != self.view["rank_pos"]:
+                self.view["rank_pos"] = pos
+                if getattr(self, "_pos_job", None) is None:      # enregistre une fois le deplacement fini
+                    self._pos_job = self.win.after(800, self._save_rank_pos)
+
+    def _save_rank_pos(self):
+        self._pos_job = None
+        self.on_view(dict(self.view))
+
+    def _rank_window_closed(self):
+        """Fenetre du rang fermee : le rang revient dans la fenetre Final 6."""
+        self._set("rank_window", False)
+
+    def _close_rank_window(self):
+        rw, self.rank_win = self.rank_win, None
+        self.rank_win_labels = None
+        if rw is not None and rw.winfo_exists():
+            pos = rw.geometry()
+            if "+" in pos:
+                self.view["rank_pos"] = pos[pos.find("+"):]
+            rw.destroy()
 
     def _bind_all(self, w):
         w.bind("<Button-3>", self._menu)
@@ -364,62 +459,169 @@ class F6Window:
         order.insert(j, src)
         self._changed()
 
-    # --- menu clic droit ----------------------------------------------------------------------
+    # --- reglages au clic droit : panneau qui reste ouvert ---------------------------------------
+
+    PANEL_BG, PANEL_HEAD = "#1c1d21", "#e0a64a"
 
     def _menu(self, event):
-        target = self._target(event)
+        self._open_panel(event.x_root, event.y_root, self._target(event))
+        # Un seul panneau par clic : la fenetre recoit aussi le clic fait sur une case.
+        return "break"
+
+    def _open_panel(self, x, y, target):
+        """Panneau des reglages : reste ouvert pendant qu'on coche, chaque reglage s'applique
+        tout de suite ; un clic ailleurs ou Echap le ferme. (Le menu de Windows se fermait a
+        chaque choix ; le rouvrir le faisait clignoter.)"""
+        self._close_panel()
         v = self.view
-        m = tk.Menu(self.win, tearoff=0)
-        lay = tk.Menu(m, tearoff=0)
-        self._lay_var = tk.StringVar(value=v["layout"])
+        bg, fg = self.PANEL_BG, TEXT
+        p = self.panel = tk.Toplevel(self.win, bg=BORDER)
+        p.overrideredirect(True)
+        p.attributes("-topmost", True)
+        body = tk.Frame(p, bg=bg, padx=10, pady=8)
+        body.pack(padx=1, pady=1)
+        font, bold = ("Segoe UI", 10), ("Segoe UI", 10, "bold")
+        opts = dict(bg=bg, fg=fg, activebackground=bg, activeforeground=fg, selectcolor="#2c2d33",
+                    font=font, anchor="w", highlightthickness=0, bd=0)
+
+        def head(parent, text):
+            tk.Label(parent, text=text, bg=bg, fg=self.PANEL_HEAD, font=bold).pack(anchor="w", pady=(6, 1))
+
+        cols = tk.Frame(body, bg=bg)
+        cols.pack(fill="x")
+        left, right, third = tk.Frame(cols, bg=bg), tk.Frame(cols, bg=bg), tk.Frame(cols, bg=bg)
+        left.pack(side="left", anchor="n", padx=(0, 18))
+        right.pack(side="left", anchor="n", padx=(0, 18))
+        third.pack(side="left", anchor="n")
+        self._panel_vars = {}
+        head(left, _("Disposition"))
+        lay = tk.StringVar(p, v["layout"])
         for key, label in LAYOUT_NAMES.items():
-            lay.add_radiobutton(label=_(label), value=key, variable=self._lay_var,
-                                command=lambda k=key: self._set("layout", k))
-        m.add_cascade(label=_("Disposition"), menu=lay)
-        size = tk.Menu(m, tearoff=0)
-        self._scale_var = tk.IntVar(value=v["scale"])
-        for sc in SCALES:
-            size.add_radiobutton(label=f"{sc} %", value=sc, variable=self._scale_var,
-                                 command=lambda s=sc: self._set("scale", s))
-        m.add_cascade(label=_("Taille"), menu=size)
-        show = tk.Menu(m, tearoff=0)
-        self._show_vars = {}
-        for key, label in SHOW_NAMES:
-            var = tk.BooleanVar(value=v[key])
-            self._show_vars[key] = var
-            show.add_checkbutton(label=_(label), variable=var, command=lambda k=key, x=var: self._set(k, x.get()))
-        m.add_cascade(label=_("Afficher"), menu=show)
-        bg = tk.Menu(m, tearoff=0)
-        self._bg_var = tk.StringVar(value=v["bg"])
+            tk.Radiobutton(left, text=_(label), value=key, variable=lay,
+                           command=lambda: self._set("layout", lay.get()), **opts).pack(anchor="w")
+        head(left, _("Taille"))
+        sizes = tk.Frame(left, bg=bg)
+        sizes.pack(anchor="w")
+        sc = tk.IntVar(p, v["scale"])
+        for i, n in enumerate(SCALES):
+            tk.Radiobutton(sizes, text=f"{n} %", value=n, variable=sc, indicatoron=False, width=5,
+                           command=lambda: self._set("scale", sc.get()),
+                           **{**opts, "anchor": "center", "selectcolor": "#3a3b40"}).grid(
+                row=i // 4, column=i % 4, padx=1, pady=1)
+        head(left, _("Fond"))
+        bgv = tk.StringVar(p, v["bg"])
         for key, (_c, label) in BACKGROUNDS.items():
-            bg.add_radiobutton(label=_(label), value=key, variable=self._bg_var, command=lambda k=key: self._set("bg", k))
-        m.add_cascade(label=_("Fond"), menu=bg)
-        m.add_separator()
-        if target and target[0] == "rank":
-            m.add_command(label=_("Masquer la case {name}", name=_("Rang du duel en cours")),
-                          command=lambda: self._set("show_rank", False))
-        elif target:
-            kind, key = target
-            label = key if kind == "boss" else self._card_name(key)
-            m.add_command(label=_("Masquer la case {name}", name=label), command=lambda k=key: self._hide(k))
-        hidden = v["hidden"]
-        if hidden:
-            back = tk.Menu(m, tearoff=0)
-            for key in hidden:
-                back.add_command(label=key if key in BOSSES else self._card_name(key),
-                                 command=lambda k=key: self._unhide(k))
-            back.add_separator()
-            back.add_command(label=_("Toutes"), command=lambda: self._set("hidden", []))
-            m.add_cascade(label=_("Reafficher une case"), menu=back)
-        m.add_command(label=_("Ordre par defaut des cartes"),
-                      command=lambda: self._set("order", list(TILES)))
-        m.add_separator()
-        m.add_command(label=_("Tout remettre par defaut"), command=self._reset)
-        m.add_command(label=_("Astuce : glisse une carte sur une autre pour la deplacer"), state="disabled")
-        try:
-            m.tk_popup(event.x_root, event.y_root)
-        finally:
-            m.grab_release()
+            tk.Radiobutton(left, text=_(label), value=key, variable=bgv,
+                           command=lambda: self._set("bg", bgv.get()), **opts).pack(anchor="w")
+        head(right, _("Afficher"))
+        for key, label in SHOW_NAMES:
+            var = tk.BooleanVar(p, v[key])
+            self._panel_vars[key] = var
+            tk.Checkbutton(right, text=_(label), variable=var,
+                           command=lambda k=key, x=var: self._set(k, x.get()), **opts).pack(anchor="w")
+        head(right, _("Cases"))
+        bopts = dict(bg="#2c2d33", fg=fg, activebackground="#3a3b40", activeforeground=fg, font=font,
+                     relief="flat", bd=0, padx=8, pady=2, anchor="w", cursor="hand2")
+        if target and target[0] == "rankwin":
+            pass
+        elif target and target[0] == "rank":
+            tk.Button(right, text=_("Masquer la case {name}", name=_("Rang du duel en cours")),
+                      command=lambda: self._panel_do(lambda: self._set("show_rank", False)), **bopts).pack(
+                fill="x", pady=1)
+        elif target and target[1] not in v["hidden"]:
+            label = target[1] if target[0] == "boss" else self._card_name(target[1])
+            tk.Button(right, text=_("Masquer la case {name}", name=label),
+                      command=lambda k=target[1]: self._panel_do(lambda: self._hide(k)), **bopts).pack(
+                fill="x", pady=1)
+        if v["hidden"]:
+            tk.Button(right, text=_("Reafficher les cases masquees ({n})", n=len(v["hidden"])),
+                      command=lambda: self._panel_do(lambda: self._set("hidden", [])), **bopts).pack(
+                fill="x", pady=1)
+        tk.Button(right, text=_("Ordre par defaut des cartes"),
+                  command=lambda: self._set("order", list(TILES)), **bopts).pack(fill="x", pady=1)
+        tk.Button(right, text=_("Tout remettre par defaut"),
+                  command=lambda: self._panel_do(self._reset), **bopts).pack(fill="x", pady=1)
+        # Rang du duel en cours : fenetre a part, couleurs, fond et taille de sa fenetre.
+        head(third, _("Rang du duel en cours"))
+        for key, label in (("rank_window", N_("Dans une fenetre a part")),
+                           ("ok_on", N_("Couleur speciale dans l'objectif"))):
+            var = tk.BooleanVar(p, v[key])
+            tk.Checkbutton(third, text=_(label), variable=var,
+                           command=lambda k=key, x=var: self._panel_do(lambda: self._set(k, x.get())),
+                           **opts).pack(anchor="w")
+        for key, label in (("rank_color", N_("Couleur du rang")), ("score_color", N_("Couleur du score")),
+                           ("ok_color", N_("Couleur dans l'objectif"))):
+            row = tk.Frame(third, bg=bg)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, bg=v[key], width=2, relief="flat", bd=0).pack(side="left", padx=(0, 6), ipady=3)
+            tk.Button(row, text=_(label) + "...", command=lambda k=key, t=label: self._pick_color(k, t),
+                      **bopts).pack(side="left", fill="x", expand=True)
+        tk.Button(third, text=_("Couleurs d'origine"),
+                  command=lambda: self._panel_do(self._reset_colors), **bopts).pack(fill="x", pady=1)
+        if v["rank_window"]:
+            head(third, _("Fenetre du rang"))
+            rbg = tk.StringVar(p, v["rank_bg"])
+            for key, (_c, label) in BACKGROUNDS.items():
+                tk.Radiobutton(third, text=_(label), value=key, variable=rbg,
+                               command=lambda: self._set("rank_bg", rbg.get()), **opts).pack(anchor="w")
+            rsizes = tk.Frame(third, bg=bg)
+            rsizes.pack(anchor="w", pady=(2, 0))
+            rsc = tk.IntVar(p, v["rank_scale"])
+            for i, n in enumerate(SCALES):
+                tk.Radiobutton(rsizes, text=f"{n} %", value=n, variable=rsc, indicatoron=False, width=5,
+                               command=lambda: self._set("rank_scale", rsc.get()),
+                               **{**opts, "anchor": "center", "selectcolor": "#3a3b40"}).grid(
+                    row=i // 4, column=i % 4, padx=1, pady=1)
+        tk.Label(body, text=_("Astuce : glisse une carte sur une autre pour la deplacer"),
+                 bg=bg, fg=DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 0))
+        # Pres du curseur, sans deborder de l'ecran.
+        p.update_idletasks()
+        w, h = p.winfo_reqwidth(), p.winfo_reqheight()
+        x = max(0, min(x, p.winfo_screenwidth() - w - 4))
+        y = max(0, min(y, p.winfo_screenheight() - h - 48))
+        p.geometry(f"+{x}+{y}")
+        self._panel_at = (x, y, target)
+        p.bind("<Escape>", lambda e: self._close_panel())
+        p.bind("<FocusOut>", lambda e: p.after(80, self._panel_focus_check))
+        p.focus_force()
+
+    def _reset_colors(self):
+        """Couleurs du rang, du score et de l'objectif remises comme a l'origine."""
+        for key in COLOR_KEYS:
+            self.view[key] = DEFAULT_VIEW[key]
+        self._changed()
+
+    def _pick_color(self, key, label):
+        """Choix d'une couleur (fenetre de Windows) ; le panneau est refait ensuite."""
+        def choose():
+            rgb, hexa = colorchooser.askcolor(color=self.view[key], parent=self.win, title=_(label))
+            if hexa:
+                self._set(key, hexa.lower())
+        self._close_panel()
+        self._panel_do(choose)
+
+    def _panel_focus_check(self):
+        """Ferme le panneau quand on clique ailleurs (le focus a quitte le panneau)."""
+        p = getattr(self, "panel", None)
+        if p is None or not p.winfo_exists():
+            return
+        f = p.focus_get()
+        if f is None or not str(f).startswith(str(p)):
+            self._close_panel()
+
+    def _panel_do(self, action):
+        """Reglage qui change le contenu du panneau lui-meme (cases masquees, tout par defaut) :
+        le panneau est refait au meme endroit."""
+        action()
+        if getattr(self, "_panel_at", None):
+            x, y, target = self._panel_at
+            self.win.after(40, lambda: self.win.winfo_exists() and self._open_panel(x, y, target))
+
+    def _close_panel(self):
+        p = getattr(self, "panel", None)
+        self.panel = None
+        if p is not None and p.winfo_exists():
+            p.destroy()
 
     @staticmethod
     def _card_name(key):
@@ -445,15 +647,29 @@ class F6Window:
         self._changed()
 
     def _changed(self):
+        """Reglage change : applique au prochain passage de la boucle (plusieurs reglages
+        d'affilee ne reconstruisent la fenetre qu'une fois)."""
+        if getattr(self, "_pending", None) is None:
+            self._pending = self.win.after(10, self._apply_change)
+
+    def _apply_change(self):
+        self._pending = None
+        if not self.win.winfo_exists():
+            return
         self.view = clean_view(self.view)
         self.on_view(dict(self.view))
         self.win.geometry("")             # la taille suit le nouveau contenu
         self.build()
+        self.win.update_idletasks()
+
 
     def geometry(self):
         return self.win.geometry() if self.win.winfo_exists() else None
 
     def close(self):
+        self._close_panel()
+        self._close_rank_window()
+        self.on_view(dict(self.view))     # position de la fenetre du rang
         geo = self.geometry()
         self.win.destroy()
         self.on_close(geo)

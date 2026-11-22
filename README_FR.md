@@ -121,8 +121,6 @@ dans `fm_speedtool/assets/f6_model.xlsx`, et le test redonne au chiffre près le
 en plus se comptent comme Crush Card (règle du tableur).
 Équipements : un compteur par type, plusieurs exemplaires possibles (Megamorph a sa propre case) ;
 le tableur a 6 cases d'équipement, donc au-delà de 6 les 6 meilleurs comptent.
-Le bouton « Ouvrir aussi sur fusion.lukadevv.com » copie un lien à coller via IMPORT sur le site.
-
 Le bouton « Afficher la fenêtre Final 6 » (ou la case « Fenêtre Final 6 » de la ligne « Afficher ») ouvre
 ou cache une fenêtre à part qui se remplit toute seule : les 6 boss et le
 Final 6 avec leur %, puis les cartes du deck en images avec leur nombre (grisées à 0). Clique sur la case
@@ -133,7 +131,12 @@ taux, noms, récap, cartes), cartes à 0 masquées, fond sombre ou vert (à rend
 chromatique »), toujours au premier plan, masquer une case. La zone des cartes garde toujours la même
 taille : avec les cartes à 0 masquées, les cartes possédées se regroupent en haut sans que la fenêtre (et
 donc la source OBS) change de taille. Glisse une carte sur une autre pour la
-déplacer (les boss restent dans l'ordre du jeu). Ces réglages sont gardés. Les illustrations des cartes sont celles du jeu, et les portraits viennent des dialogues d'avant-duel.
+déplacer (les boss restent dans l'ordre du jeu). Ces réglages sont gardés.
+
+Le rang du duel en cours peut avoir sa propre fenêtre (panneau du clic droit, « Rang du duel en cours » >
+« Dans une fenêtre à part »), à capturer seule dans OBS : fond sombre ou vert (clé chromatique), taille de
+50 à 150 %, couleurs du rang, du score et de l'objectif atteint au choix. Fermer cette fenêtre remet le rang
+dans la fenêtre Final 6. Avec le fond vert, choisis une couleur d'objectif qui ne soit pas verte. Les illustrations des cartes sont celles du jeu, et les portraits viennent des dialogues d'avant-duel.
 
 ## Mots de passe
 

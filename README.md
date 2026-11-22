@@ -114,8 +114,6 @@ Exarion's "FM win rate calculator 2.1" spreadsheet. "Dark Hole" is ticked if you
 Hole instead of Raigeki; extra Raigeki/Dark Hole count as Crush Card (spreadsheet rule).
 Equips have one counter per type, several copies allowed (Megamorph has its own box); the
 spreadsheet has 6 equip slots, so with more than 6 the best 6 count.
-"Also open on fusion.lukadevv.com" copies a link to paste with IMPORT on that site.
-
 "Show the Final 6 window" (or the "Final 6 window" box of the "Show" line) shows or hides a separate
 window that fills itself: the 6 bosses and the Final 6
 with their %, then the deck cards as pictures with their count (greyed at 0). Click the Raigeki tile to
@@ -126,6 +124,11 @@ names, summary, cards), hide cards at 0,
 dark or green background (made transparent in OBS with the "Chroma Key" filter), always on top,
 hide a tile. The card area always keeps the same size: with cards at 0 hidden, the owned cards gather
 at the top while the window (and so the OBS source) keeps its size. Drag a card onto another to move it (bosses keep the game's order). These settings are kept.
+
+The current duel rank can have its own window (right click panel, "Current duel rank" > "In its own
+window"), to capture alone in OBS: dark or green background (chroma key), size from 50 to 150 %, your own
+colours for the rank, the score and the target reached. Closing that window puts the rank back in the
+Final 6 window. With the green background, pick a target colour that is not green.
 The card pictures are the game's own, and the portraits come from the pre-duel dialogues.
 
 ## Passwords
