@@ -9,8 +9,11 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
 ## Running it
 
 - Download `FMSpeedTool.exe` and `FMSpeedTool.asl` from the Releases page, or run `python fm_speedtool\app.py`.
-- The ePSXe window must stay **visible and not covered**. If it is covered, the status line says so
-  and nothing is read.
+- **Game: ePSXe, DuckStation or PS2** (top right). The emulator is found by its program (not by its
+  window title); with DuckStation only the game picture is read (no menus or bars).
+- The game window must stay **visible and not covered**. If it is covered, the status line says so
+  and nothing is read; the tool then looks for the game window again every second. **Recaler** starts
+  over: window, black bars and framing.
 - **Any ePSXe window size works** (tested from 640×480 to 1280×1024): the image is scaled to
   640×512, and black bars around the game (kept aspect ratio) are detected and removed.
 - **Automatic framing**: if your ePSXe settings shift, stretch or zoom the picture a little

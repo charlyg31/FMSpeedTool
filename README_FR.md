@@ -6,7 +6,10 @@ Outil de speedrun pour Yu-Gi-Oh! Forbidden Memories (US, 15 Card Mod) sur ePSXe.
 ## Lancer
 
 - `FMSpeedTool.exe` et `FMSpeedTool.asl` (page Releases de GitHub), ou bien `python fm_speedtool\app.py`.
-- La fenêtre d'ePSXe doit rester **visible et non recouverte**. Si elle est recouverte, le statut l'indique et rien n'est lu.
+- **Jeu : ePSXe, DuckStation ou PS2** (en haut à droite). L'émulateur est reconnu à son programme
+  (pas au titre de sa fenêtre) ; avec DuckStation, seule l'image du jeu est lue (sans menus ni barres).
+- La fenêtre du jeu doit rester **visible et non recouverte**. Si elle est recouverte, le statut l'indique et rien n'est lu ;
+  le logiciel recherche alors la fenêtre du jeu toutes les secondes. **Recaler** repart de zéro : fenêtre, bandes noires et cadrage.
 - **Toutes les tailles de fenêtre ePSXe fonctionnent** (testé de 640×480 à 1280×1024, et 640×480 à
   2560×1920 sur images) : l'image est ramenée en 640×512. Si ePSXe garde les proportions, les
   bandes noires autour du jeu sont détectées et retirées automatiquement.

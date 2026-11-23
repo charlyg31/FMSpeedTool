@@ -28,12 +28,13 @@ BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
-VERSION = "1.26"                  # affichee dans le titre de la fenetre
+SOURCES = {"epsxe": "ePSXe", "duckstation": "DuckStation", "ps2": "PS2"}   # source du jeu -> nom affiche
+VERSION = "1.27"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
     "language": "",               # "" = langue de Windows (francais ou anglais)
-    "source": "epsxe",            # "epsxe" (fenetre ePSXe) ou "ps2" (carte d'acquisition)
+    "source": "epsxe",            # "epsxe", "duckstation" (emulateurs) ou "ps2" (carte d'acquisition)
     "ps2_window": "",             # titre de la fenetre qui affiche la PS2 (projecteur OBS...)
     "ps2_framing": None,          # [dy, sy, dx, sx, complet] cadrage PS2 trouve (None : a chercher)
     "epsxe_framing": None,        # idem pour la fenetre ePSXe
@@ -187,12 +188,16 @@ class App:
         # session a l'autre. En attendant ces ecrans, calage en hauteur sur le panneau
         # LP/COM/YOU ou le menu titre, pour ePSXe aussi (fenetre avec bordures, logiciel
         # lance en pleine run).
-        self.framing_key = "ps2_framing" if ps2 else "epsxe_framing"
+        source = self.cfg.get("source", "epsxe")
+        if source not in SOURCES:
+            source = "epsxe"
+        self.framing_key = f"{source}_framing"
         self.tracker.framing = vision.Framing.from_values(os.path.join(BASE_DIR, "assets", "hud_ref.png"),
                                                           self.cfg.get(self.framing_key), vertical=True)
         self._setup_audio()
         self.worker = Worker(self)
-        self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None)
+        self.worker.cap.set_source((self.cfg.get("ps2_window") or "?") if ps2 else None,
+                                   emulator=source if not ps2 else "epsxe")
 
         page = self.page = ttk.Frame(root, padding=6)
         page.pack(fill="both", expand=True)
@@ -390,10 +395,9 @@ class App:
         if self.source.get() == "ps2":
             self.ps2_box.pack(side="right", padx=4)
             ttk.Label(top, text=_("Fenetre :")).pack(side="right")
-        ttk.Radiobutton(top, text="PS2", value="ps2", variable=self.source,
-                        command=self._set_source).pack(side="right", padx=(2, 12))
-        ttk.Radiobutton(top, text="ePSXe", value="epsxe", variable=self.source,
-                        command=self._set_source).pack(side="right", padx=2)
+        for value in ("ps2", "duckstation", "epsxe"):
+            ttk.Radiobutton(top, text=SOURCES[value], value=value, variable=self.source,
+                            command=self._set_source).pack(side="right", padx=(2, 12) if value == "ps2" else 2)
         ttk.Label(top, text=_("Jeu :")).pack(side="right")
         # La ligne d'etat prend la place restante (placee apres : le choix du jeu reste entier).
         ttk.Label(top, textvariable=self.status, font=("Segoe UI", 10)).pack(side="left")
@@ -499,12 +503,15 @@ class App:
         self._log(_("Fenetre PS2 : {title}", title=title))
 
     def _recalibrate(self):
-        """Oublie le cadrage : il sera recherche des que l'ecran du deck s'affiche
-        (PS2 : ou le panneau LP/COM/YOU, ou le menu titre)."""
+        """Repart de zero : fenetre du jeu recherchee de nouveau (celle trouvee au lancement
+        pouvait etre la mauvaise, ou recouverte), bandes noires et cadrage oublies ; le
+        cadrage est refait des que l'ecran titre, le deck ou le panneau LP/COM/YOU s'affiche."""
+        self.worker.cap.reset()
         fr = self.tracker.framing
-        if fr is None:
-            return
         with self.worker.lock:
+            self.tracker.area = vision.GameArea()
+            if fr is None:
+                return
             fr.reset()
             self.tracker.framing_next = 0.0
             self.tracker.deck_wait = None
@@ -857,6 +864,17 @@ class App:
         if not isinstance(self.f6, f6calc.F6Process):
             return
         for kind, value, error in self.f6.poll():
+            if kind == "ready" and error and not getattr(self, "_f6_retried", False):
+                # Echec au chargement (vu une fois : "No module named 'unicodedata'", non
+                # reproduit ensuite) : un 2e essai dans un nouveau processus avant d'abandonner.
+                self._f6_retried = True
+                self._log(_("Tableur Final 6 : {error} - nouvel essai", error=error))
+                self.f6.close()
+                try:
+                    self.f6 = f6calc.F6Process(os.path.join(BASE_DIR, "assets", "f6_model.xlsx"))
+                except Exception:
+                    pass
+                return
             if kind == "ready":
                 self._update_f6()
             elif error:
@@ -976,7 +994,7 @@ class App:
         def val(x):
             return "-" if x is None else x
         fr = self.tracker.framing
-        src = "PS2" if self.cfg.get("source") == "ps2" else "ePSXe"
+        src = SOURCES.get(self.cfg.get("source"), "ePSXe")
         if fr is not None and not fr.full:
             src += " " + _("(cadrage : ecran titre ou deck)")
         snd = {"OK": _("son OK"), "silence": _("pas de son du jeu"), "indisponible": _("son indisponible"),

@@ -1,13 +1,20 @@
-"""Capture de l'image de la fenetre du jeu : ePSXe, ou pour la PS2 la fenetre
-qui affiche la carte d'acquisition (projecteur OBS...). Aucune lecture memoire."""
+"""Capture de l'image de la fenetre du jeu : ePSXe, DuckStation, ou pour la PS2 la
+fenetre qui affiche la carte d'acquisition (projecteur OBS...). Aucune lecture memoire."""
 
 import ctypes
 import ctypes.wintypes as wt
+import os
+import time
 
 import numpy as np
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+kernel32.OpenProcess.restype = wt.HANDLE
+kernel32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+kernel32.CloseHandle.argtypes = [wt.HANDLE]
 
 try:
     user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # per-monitor v2
@@ -20,6 +27,7 @@ user32.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
 user32.GetClassNameW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
 user32.IsWindowVisible.argtypes = [wt.HWND]
 user32.GetClientRect.argtypes = [wt.HWND, ctypes.POINTER(wt.RECT)]
+user32.EnumChildWindows.argtypes = [wt.HWND, WNDENUMPROC, wt.LPARAM]
 user32.ClientToScreen.argtypes = [wt.HWND, ctypes.POINTER(wt.POINT)]
 user32.GetWindowDC.argtypes = [wt.HWND]
 user32.GetWindowDC.restype = wt.HDC
@@ -55,26 +63,79 @@ class BITMAPINFOHEADER(ctypes.Structure):
                 ("biClrImportant", wt.DWORD)]
 
 
-def find_epsxe_window():
-    """Fenetre principale d'ePSXe (titre commencant par 'ePSXe'), la plus grande."""
+EMULATORS = {"epsxe": "epsxe", "duckstation": "duckstation"}   # source -> debut du nom du .exe
+_exe_cache = {}
+
+
+def process_exe(hwnd):
+    """Nom du programme (en minuscules) qui possede la fenetre, ex. 'epsxe.exe'."""
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    pid = pid.value
+    if pid in _exe_cache:
+        return _exe_cache[pid]
+    name = ""
+    h = kernel32.OpenProcess(0x1000, False, pid)           # PROCESS_QUERY_LIMITED_INFORMATION
+    if h:
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            n = wt.DWORD(1024)
+            if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+                name = os.path.basename(buf.value).lower()
+        finally:
+            kernel32.CloseHandle(h)
+    if len(_exe_cache) > 500:
+        _exe_cache.clear()
+    _exe_cache[pid] = name
+    return name
+
+
+def _client_area(hwnd):
+    r = wt.RECT()
+    user32.GetClientRect(hwnd, ctypes.byref(r))
+    return r.right * r.bottom
+
+
+def _render_child(top):
+    """DuckStation (Qt) : l'image du jeu est dans une sous-fenetre, entre la barre d'outils et
+    la barre d'etat ; c'est la plus grande sous-fenetre visible. Sans elle : la fenetre."""
+    best = [0, top]
+
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            a = _client_area(hwnd)
+            if a > best[0]:
+                best[0], best[1] = a, hwnd
+        return True
+
+    user32.EnumChildWindows(top, WNDENUMPROC(cb), 0)
+    return best[1] if best[0] >= 0.3 * _client_area(top) else top
+
+
+def find_emulator_windows(source):
+    """Fenetres visibles de l'emulateur (reconnu a son programme, pas a son titre : un
+    explorateur ouvert sur un dossier "EpsxE" a un titre qui commence pareil), les plus
+    grandes d'abord. Liste de (fenetre a capturer, fenetre principale)."""
+    prefix = EMULATORS[source]
     found = []
 
     def cb(hwnd, _):
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        title = ctypes.create_unicode_buffer(256)
-        user32.GetWindowTextW(hwnd, title, 256)
-        if title.value.lower().startswith("epsxe"):
-            r = wt.RECT()
-            user32.GetClientRect(hwnd, ctypes.byref(r))
-            found.append((r.right * r.bottom, hwnd, title.value))
+        if user32.IsWindowVisible(hwnd) and process_exe(hwnd).startswith(prefix):
+            a = _client_area(hwnd)
+            if a >= 160 * 120:
+                target = _render_child(hwnd) if source == "duckstation" else hwnd
+                found.append((a, target, hwnd))
         return True
 
     user32.EnumWindows(WNDENUMPROC(cb), 0)
-    if not found:
-        return None
-    found.sort(reverse=True)
-    return found[0][1]
+    found.sort(key=lambda f: -f[0])
+    return [(t, h) for _a, t, h in found]
+
+
+def find_epsxe_window():
+    """Fenetre d'ePSXe a capturer (la plus grande), ou None."""
+    wins = find_emulator_windows("epsxe")
+    return wins[0][0] if wins else None
 
 
 def list_windows():
@@ -169,11 +230,13 @@ GA_ROOT = 2
 
 
 def is_covered(hwnd):
-    """Une autre fenetre recouvre-t-elle la zone de jeu ? (la capture copie l'ecran)"""
+    """Une autre fenetre recouvre-t-elle la zone de jeu ? (la capture copie l'ecran)
+    hwnd peut etre une sous-fenetre (DuckStation) : on compare les fenetres principales."""
+    root = user32.GetAncestor(hwnd, GA_ROOT) or hwnd
     x, y, w, h = client_rect_on_screen(hwnd)
     for fx, fy in ((0.5, 0.5), (0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9)):
         top = user32.WindowFromPoint(wt.POINT(int(x + w * fx), int(y + h * fy)))
-        if user32.GetAncestor(top, GA_ROOT) != hwnd:
+        if user32.GetAncestor(top, GA_ROOT) != root:
             return True
     return False
 
@@ -230,9 +293,13 @@ class WindowCapture:
     etre visible (PrintWindow rend une image partielle et figee avec le GPU d'ePSXe).
     DXGI si possible (60 img/s), sinon copie GDI."""
 
+    RESEARCH = 1.0                        # fenetre recouverte : nouvelle recherche toutes les 1 s
+
     def __init__(self):
         self.hwnd = None
-        self.title = None                 # None : ePSXe ; sinon titre de la fenetre (PS2)
+        self.title = None                 # None : emulateur ; sinon titre de la fenetre (PS2)
+        self.emulator = "epsxe"           # "epsxe" ou "duckstation" (quand title vaut None)
+        self.next_search = 0.0
         self.method = "screen"
         self.covered = False
         try:
@@ -240,22 +307,48 @@ class WindowCapture:
         except Exception:
             self.dxgi = None
 
+    def _search(self):
+        """Fenetre du jeu : parmi celles de l'emulateur, la plus grande non recouverte."""
+        if self.title is not None:
+            return find_window_titled(self.title)
+        wins = find_emulator_windows(self.emulator)
+        for target, _top in wins:
+            if not is_covered(target):
+                return target
+        return wins[0][0] if wins else None
+
     def ensure_window(self):
         if self.hwnd and user32.IsWindowVisible(self.hwnd):
             return True
-        self.hwnd = find_epsxe_window() if self.title is None else find_window_titled(self.title)
+        self.hwnd = self._search()
+        self.next_search = time.monotonic() + self.RESEARCH
         return self.hwnd is not None
 
-    def set_source(self, title):
-        """None = fenetre ePSXe ; un titre = fenetre de la carte d'acquisition (PS2)."""
-        if title != self.title:
+    def reset(self):
+        """Oublie la fenetre trouvee : elle est recherchee de nouveau (bouton Recaler)."""
+        self.hwnd = None
+        self.next_search = 0.0
+
+    def set_source(self, title, emulator="epsxe"):
+        """title None = fenetre de l'emulateur (ePSXe ou DuckStation) ; un titre = fenetre
+        de la carte d'acquisition (PS2)."""
+        if title != self.title or emulator != self.emulator:
             self.title = title
+            self.emulator = emulator
             self.hwnd = None
 
     def grab(self):
         if not self.ensure_window() or user32.IsIconic(self.hwnd):
             return None
         self.covered = is_covered(self.hwnd)
+        if self.covered and time.monotonic() >= self.next_search:
+            # Recouverte : peut-etre une autre fenetre du meme programme (ou une fenetre prise
+            # par erreur au lancement) ; on recherche, sans rester bloque sur la premiere.
+            self.next_search = time.monotonic() + self.RESEARCH
+            other = self._search()
+            if other and other != self.hwnd:
+                self.hwnd = other
+                self.covered = is_covered(other)
         if self.covered:
             return None  # l'image serait celle de la fenetre du dessus
         if self.dxgi is not None:

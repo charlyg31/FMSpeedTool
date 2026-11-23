@@ -67,6 +67,7 @@
   "Tableur indisponible : utilise le site": "Spreadsheet unavailable: use the website",
   "Tableur Final 6 : {error}": "Final 6 spreadsheet: {error}",
   "Calcul impossible ({error})": "Cannot compute ({error})",
+  "Tableur Final 6 : {error} - nouvel essai": "Final 6 spreadsheet: {error} - trying again",
   "Cacher la fenetre Final 6": "Hide the Final 6 window",
   "Ecran PASSWORD : codes des cartes utiles": "PASSWORD screen: codes of useful cards",
   "Retour": "Back",
