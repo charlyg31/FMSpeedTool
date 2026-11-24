@@ -88,18 +88,26 @@ def _pid(wid):
     return int(v[0]) if v is not None and len(v) else None
 
 
-def process_exe(wid):
-    """Nom du programme (en minuscules) qui possede la fenetre, ex. 'duckstation-qt'."""
-    pid = _pid(wid)
-    if not pid:
+def _wm_class(wid):
+    try:
+        c = _win(wid).get_wm_class()
+    except xerror.XError:
         return ""
-    for path in (f"/proc/{pid}/exe", f"/proc/{pid}/comm"):
-        try:
-            name = os.readlink(path) if path.endswith("exe") else open(path).read().strip()
-            return os.path.basename(name).lower()
-        except OSError:
-            continue
-    return ""
+    return " ".join(c).lower() if c else ""
+
+
+def process_exe(wid):
+    """Nom du programme (en minuscules) qui possede la fenetre, ex. 'duckstation-qt'.
+    Sans _NET_WM_PID (ou programme illisible) : la classe X11 de la fenetre (WM_CLASS)."""
+    pid = _pid(wid)
+    if pid:
+        for path in (f"/proc/{pid}/exe", f"/proc/{pid}/comm"):
+            try:
+                name = os.readlink(path) if path.endswith("exe") else open(path).read().strip()
+                return os.path.basename(name).lower()
+            except OSError:
+                continue
+    return _wm_class(wid)
 
 
 def _viewable(wid):

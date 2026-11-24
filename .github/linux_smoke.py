@@ -27,10 +27,11 @@ root.geometry("640x480+40+40")
 photo = ImageTk.PhotoImage(img)
 tk.Label(root, image=photo, bd=0).pack()
 root.update()
-# Tk ne pose pas toujours _NET_WM_PID : on le pose (DuckStation, en Qt, le fait).
+# Tk ne pose pas toujours _NET_WM_PID : on le pose sur la fenetre de l'application (celle de
+# _NET_CLIENT_LIST, pas le cadre du gestionnaire de fenetres), comme DuckStation (Qt) le fait.
 import os
 d = display.Display()
-w = d.create_resource_object("window", int(root.wm_frame(), 16))
+w = d.create_resource_object("window", root.winfo_id()).query_tree().parent
 w.change_property(d.intern_atom("_NET_WM_PID"), d.intern_atom("CARDINAL"), 32, [os.getpid()])
 d.flush()
 root.mainloop()
@@ -73,6 +74,11 @@ def main():
             img = cap.grab()
             if img is not None:
                 break
+        if img is None:
+            import capture_x11 as cx
+            for wid in cx._client_list():
+                print("fenetre", hex(wid), repr(cx.window_title(wid)), "pid", cx._pid(wid),
+                      "programme", cx.process_exe(wid), "visible", cx._viewable(wid))
         assert img is not None, f"fenetre non capturee (fenetre={cap.hwnd}, recouverte={cap.covered})"
         print("capture", img.shape, "fenetre", cap.hwnd)
         import cv2
