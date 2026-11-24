@@ -52,7 +52,7 @@ que le jeu, sans incrustation par-dessus.
 | Split 1re défaite (Heishin 1) | YOU LOSE / WINNER — COM |
 | Free Duel | Écran « FREE DUEL / SELECT OPPONENT » : aucun split par duel |
 | Free Duel / farm | Aucun split (option « Split fin de farm » désactivée par défaut) |
-| LOAD d'une save | SAVE COMPLETE! retient combien de splits sont faits ; LOAD COMPLETE! (après une mort par exemple) ramène la run à cette save. Option 1 (par défaut) : annuler dans LiveSplit les splits faits depuis la save. Option 2 : ne pas compter les splits des duels rejoués |
+| LOAD d'une save | SAVE COMPLETE! retient combien de splits sont faits, le deck lu et le total d'étoiles ; LOAD COMPLETE! (après une mort par exemple) ramène la run à cette save, deck et étoiles compris. Option 1 (par défaut) : annuler dans LiveSplit les splits faits depuis la save. Option 2 : ne pas compter les splits des duels rejoués |
 | Adversaire | Les 39 adversaires : nom écrit sur l'écran Free Duel (lu lettre par lettre), ou portrait du dialogue juste avant un duel de campagne. Vérifié sur deux runs All Duelists (YouTube et Twitch, deux joueurs) : chaque duel a le bon adversaire |
 | All Duelists | Option « All Duelists (DMK + Heishin en Free Duel) » (désactivée par défaut) : la 1re victoire en Free Duel contre Duel Master K et la 1re contre Heishin (Heishin 1, perdu en campagne) splittent comme des victoires de campagne au lieu de compter comme du farm |
 | Objectif A-TEC | Choisi tout seul contre Pegasus |

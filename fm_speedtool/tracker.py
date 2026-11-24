@@ -94,7 +94,8 @@ class Tracker:
         self.history = []                 # un element par duel termine de la run
         self.split_counts = {}            # splits envoyes a LiveSplit pendant la run, par type
         self.skip_splits = {}             # par type : prochains splits a ignorer (duels rejoues)
-        self.save_point = None            # ({type: splits atteints}, victoires, defaites, etoiles) a la sauvegarde
+        # ({type: splits atteints}, victoires, defaites, etoiles, deck) a la sauvegarde
+        self.save_point = None
         self.pending_split = None         # (message, echeance) : split au RESULTS OF DUEL
         self.in_duel = False
         self.free_duel = False            # mode du duel en cours / a venir
@@ -332,7 +333,8 @@ class Tracker:
     def _save(self):
         """SAVE COMPLETE! : retient ou en est la run (splits deja faits dans le jeu)."""
         reached = self._reached()
-        self.save_point = (reached, self.wins, self.losses, self.stars)
+        deck = self.deck.snapshot() if self.deck is not None else None
+        self.save_point = (reached, self.wins, self.losses, self.stars, deck)
         self.on_event("save", _("Sauvegarde : {n} split(s) faits a ce point", n=sum(reached.values())))
 
     def _load(self):
@@ -342,7 +344,16 @@ class Tracker:
         if self.save_point is None:
             self.on_event("info", _("Chargement : aucune sauvegarde vue pendant cette run, rien a corriger"))
             return
-        reached, self.wins, self.losses, stars = self.save_point
+        reached, self.wins, self.losses, stars, deck = self.save_point
+        # Etoiles : celles de la sauvegarde ; un gain encore en attente (victoire juste avant
+        # le chargement) ne doit pas s'y ajouter ensuite.
+        self.stars_pending, self.spoils = None, 0
+        if deck is not None and self.deck is not None:
+            # Le jeu revient au deck de la sauvegarde : le deck lu aussi (cartes gagnees,
+            # ajoutees ou retirees depuis : oubliees), compteurs du Final 6 compris.
+            self.deck.restore(deck)
+            n, _complete = self.deck.watcher.summary()
+            self.on_event("deck", _("Deck : retour au deck de la sauvegarde ({n}/40)", n=n))
         if stars != self.stars:
             self.stars = stars
             self.on_event("stars", _("Etoiles : {total} (retour a la sauvegarde)", total=stars))
