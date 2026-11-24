@@ -569,10 +569,17 @@ class Tracker:
             return
         if self.reveal_watch:
             t0, ref = self.reveal_watch
-            verdict = vision.card_compare(ref, vision.reveal_card(img))
+            cur = vision.reveal_card(img)
+            verdict = vision.card_compare(ref, cur)
             if verdict == "counting":
                 self._count_reveal("equip")
-            elif verdict == "other" or now - t0 > REVEAL_WATCH:
+            elif now - t0 > REVEAL_WATCH:
+                self._count_reveal("fusion")
+            elif verdict == "turning":
+                # La carte finissait de pivoter quand elle a ete prise comme reference (Megamorph
+                # juste apres une fusion, video d'Aifo0s du 24/11) : nouvelle reference.
+                self.reveal_watch = (t0, cur)
+            elif verdict == "other":
                 self._count_reveal("fusion")
         # Le flash d'une fusion/d'un equipement peut blanchir l'encadre FIELD (HUD
         # juge absent) : les panneaux COM/YOU suffisent alors, s'ils sont visibles.
