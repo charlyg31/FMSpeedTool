@@ -11,7 +11,8 @@ Notice pour la personne ou l'assistant qui teste sur une machine Linux. Réponds
 - Une session **Wayland** native n'est pas lisible : il faut X11, Xvfb, ou lancer l'émulateur en
   XWayland (DuckStation : `QT_QPA_PLATFORM=xcb`).
 - Le son (fusion / équipement) et le script LiveSplit `.asl` restent **Windows seulement** ; sous Linux
-  LiveSplit est joint par son serveur TCP (LiveSplit sous Wine).
+  le minuteur conseillé est LiveSplit One (choix par défaut : FM Speed Tool est le serveur
+  `ws://localhost:16835` auquel il se connecte) ; LiveSplit sous Wine reste possible par son serveur TCP.
 - Réglages : `~/.config/FMSpeedTool`.
 
 ## 1. Récupérer la branche
