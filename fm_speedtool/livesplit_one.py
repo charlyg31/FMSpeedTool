@@ -197,7 +197,9 @@ class LiveSplitOneServer:
         self.command("split")
 
     def reset(self):
-        self.command("reset")
+        # Sans saveAttempt, LiveSplit One demande "Enregistrer les meilleurs temps ?" et
+        # attend le joueur : la nouvelle run ne demarrerait pas. Oui, comme par defaut.
+        self.command("reset", saveAttempt=True)
 
     def start(self):
         self.command("start")

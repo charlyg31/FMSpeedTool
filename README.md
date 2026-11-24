@@ -34,8 +34,9 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
 - **LiveSplit One** (web at one.livesplit.org or desktop; works on Linux and Mac too): pick
   "LiveSplit One" in the Options panel, then in LiveSplit One: Settings > Server Connection >
   Connect, address `ws://localhost:16835` (shown in the status line). Start, splits, reset and
-  undo after a save load are sent by the tool. In Chrome, allow "access to devices on your local
-  network" when the browser asks. Close the LiveSplit One settings during the run: it refuses
+  undo after a save load are sent by the tool. The first time, Chrome and Firefox ask whether
+  one.livesplit.org may "access other apps and services on this device": click Allow (in Chrome,
+  then click Connect once more). Close the LiveSplit One settings during the run: it refuses
   commands while they are open.
 
 ## Playing on PS2 (capture card)
