@@ -90,7 +90,8 @@ def clean_view(view):
 
 
 def _font(size):
-    for name in ("segoeuib.ttf", "arialbd.ttf"):
+    for name in ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
         try:
             return ImageFont.truetype(name, size)
         except OSError:

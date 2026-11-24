@@ -16,6 +16,7 @@ Disposition (entiers 32 bits, petit-boutiste) :
 
 import mmap
 import struct
+import sys
 
 NAME = "FMSpeedTool_LiveSplit"
 SIZE = 64
@@ -26,6 +27,10 @@ KIND_WIN, KIND_FIRST_LOSS, KIND_FARM, KIND_OTHER = 1, 2, 3, 4
 
 class Bridge:
     def __init__(self):
+        if sys.platform != "win32":
+            # Memoire partagee nommee : Windows seulement (le script .asl tourne dans LiveSplit
+            # pour Windows). Sous Linux : serveur TCP de LiveSplit.
+            raise OSError("script LiveSplit : Windows seulement")
         self.mem = mmap.mmap(-1, SIZE, tagname=NAME)
         self.heartbeat = 0
         self.counts = [0, 0, 0]          # departs, splits, resets

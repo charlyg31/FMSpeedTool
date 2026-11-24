@@ -1,0 +1,33 @@
+name: Linux
+
+on:
+  push:
+    branches: [linux]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Paquets systeme (Tk, ecran virtuel, gestionnaire de fenetres)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox libtk8.6 tk8.6 python3-tk fonts-dejavu-core
+      - name: Dependances Python
+        run: pip install -r requirements.txt
+      - name: Test capture + lancement
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'openbox & sleep 2; python .github/linux_smoke.py'
+      - name: Construction
+        run: sh build_linux.sh
+      - name: Exe construit demarre
+        run: |
+          xvfb-run -a sh -c 'openbox & sleep 2; (dist/FMSpeedTool & echo $! > pid); sleep 40; kill -0 $(cat pid)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FMSpeedTool-linux
+          path: dist/

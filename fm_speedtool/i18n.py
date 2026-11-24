@@ -25,7 +25,9 @@ SOURCE_NAME = "Français"
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 EXE_DIR = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
            else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-APP_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FMSpeedTool")
+# Reglages : %APPDATA%\FMSpeedTool sous Windows, ~/.config/FMSpeedTool sous Linux.
+APP_DIR = os.path.join(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME")
+                       or os.path.join(os.path.expanduser("~"), ".config"), "FMSpeedTool")
 LANG_DIRS = [os.path.join(BASE_DIR, "lang"), os.path.join(EXE_DIR, "lang"),
              os.path.join(APP_DIR, "lang")]
 
@@ -80,7 +82,10 @@ def available():
 
 
 def system_language():
-    """'fr' si Windows est en francais, sinon 'en'."""
+    """'fr' si Windows (ou la variable LANG sous Linux) est en francais, sinon 'en'."""
+    if sys.platform != "win32":
+        lang = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+        return "fr" if lang.lower().startswith("fr") else "en"
     try:
         lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
         if lid & 0x3FF == 0x0C:            # LANG_FRENCH

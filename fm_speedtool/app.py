@@ -23,7 +23,9 @@ import vision
 from i18n import _
 from livesplit import LiveSplitClient
 
-APP_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FMSpeedTool")
+# Reglages : %APPDATA%\FMSpeedTool sous Windows, ~/.config/FMSpeedTool sous Linux.
+APP_DIR = os.path.join(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME")
+                       or os.path.join(os.path.expanduser("~"), ".config"), "FMSpeedTool")
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
@@ -39,7 +41,9 @@ DEFAULT_CONFIG = {
     "ps2_framing": None,          # [dy, sy, dx, sx, complet] cadrage PS2 trouve (None : a chercher)
     "epsxe_framing": None,        # idem pour la fenetre ePSXe
     "use_audio": True,            # le son du jeu tranche entre fusion et equipement
-    "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
+    # "script" (FMSpeedTool.asl, Windows) ou "tcp" (serveur TCP ; seul possible sous Linux,
+    # LiveSplit tournant sous Wine)
+    "livesplit_mode": "script" if sys.platform == "win32" else "tcp",
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
                 "load_mode": "undo", "all_duelists": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
@@ -469,8 +473,8 @@ class App:
     def _setup_audio(self):
         """Le son du jeu (ePSXe seul) tranche entre fusion et equipement apres un flash."""
         self.tracker.audio = self.tracker.audio_clf = None
-        if not self.cfg.get("use_audio", True):
-            return
+        if not self.cfg.get("use_audio", True) or sys.platform != "win32":
+            return                        # capture du son d'un programme : Windows seulement
         try:
             import audio
             self.tracker.audio_clf = audio.Classifier(os.path.join(BASE_DIR, "assets", "audio_templates.npz"))
