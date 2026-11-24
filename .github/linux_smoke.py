@@ -93,17 +93,26 @@ def main():
         proc.terminate()
 
     # Logiciel complet : 40 s sans plantage (tableur charge dans son processus).
+    # Sortie d'erreurs dans un fichier (pas un tube : le processus du tableur, lance par le
+    # logiciel, le garderait ouvert et l'attente ne finirait jamais) ; tout le groupe de
+    # processus est arrete a la fin.
+    import signal
     env = dict(os.environ, XDG_CONFIG_HOME=tempfile.mkdtemp())
-    app = subprocess.Popen([sys.executable, os.path.join(SRC, "app.py")], env=env,
-                           stderr=subprocess.PIPE, text=True)
-    time.sleep(40)
-    alive = app.poll() is None
-    app.terminate()
-    try:
-        err = app.communicate(timeout=15)[1]
-    except subprocess.TimeoutExpired:
-        app.kill()
-        err = app.communicate()[1]
+    log = os.path.join(env["XDG_CONFIG_HOME"], "stderr.txt")
+    with open(log, "w") as errf:
+        app = subprocess.Popen([sys.executable, os.path.join(SRC, "app.py")], env=env,
+                               stdout=subprocess.DEVNULL, stderr=errf, start_new_session=True)
+        time.sleep(40)
+        alive = app.poll() is None
+        try:
+            os.killpg(app.pid, signal.SIGTERM)
+            app.wait(timeout=10)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(app.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    err = open(log).read()
     print(err[-3000:])
     assert alive, "le logiciel s'est arrete"
     assert "Traceback" not in err, "erreur Python pendant le lancement"
