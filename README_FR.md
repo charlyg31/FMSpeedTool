@@ -31,9 +31,11 @@ Outil de speedrun pour Yu-Gi-Oh! Forbidden Memories (US, 15 Card Mod) sur ePSXe.
 - **LiveSplit One** (web sur one.livesplit.org ou version de bureau ; marche aussi sous Linux et Mac) :
   choisis « LiveSplit One » dans le panneau Options, puis dans LiveSplit One : Paramètres > Connexion
   au serveur > Se connecter, adresse `ws://localhost:16835` (rappelée dans la ligne d'état). Départ,
-  splits, reset et retour en arrière au chargement d'une save sont envoyés par l'outil. Dans Chrome,
-  autorise « l'accès aux appareils du réseau local » quand le navigateur le demande. Ferme les
-  paramètres de LiveSplit One pendant la run : il refuse les commandes tant qu'ils sont ouverts.
+  splits, reset et retour en arrière au chargement d'une save sont envoyés par l'outil. La première
+  fois, Chrome et Firefox demandent si one.livesplit.org peut « accéder à d'autres applis et services
+  sur cet appareil » : clique sur Autoriser (dans Chrome, clique ensuite une seconde fois sur Se
+  connecter). Ferme les paramètres de LiveSplit One pendant la run : il refuse les commandes tant
+  qu'ils sont ouverts.
 
 ## Jouer sur PS2 (carte d'acquisition)
 
