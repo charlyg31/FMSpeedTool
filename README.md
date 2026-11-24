@@ -55,7 +55,7 @@ overlay on top.
 | First loss split (Heishin 1) | YOU LOSE / WINNER — COM |
 | Free Duel | "FREE DUEL / SELECT OPPONENT" screen: no split for those duels |
 | Farm | No split ("Split at end of farm" option off by default) |
-| Save loaded | SAVE COMPLETE! remembers how many splits are done; LOAD COMPLETE! (after a death, for example) brings the run back to that save. Option 1 (default): undo in LiveSplit the splits made since the save. Option 2: don't count the splits of the replayed duels |
+| Save loaded | SAVE COMPLETE! remembers how many splits are done, the deck read and the star chip total; LOAD COMPLETE! (after a death, for example) brings the run back to that save, deck and star chips included. Option 1 (default): undo in LiveSplit the splits made since the save. Option 2: don't count the splits of the replayed duels |
 | Opponent | All 39 opponents: name written on the Free Duel screen (read letter by letter), or portrait of the dialogue just before a campaign duel. Checked on two All Duelists runs (YouTube and Twitch, two players): every duel gets the right opponent |
 | All Duelists | Option "All Duelists (DMK + Heishin in Free Duel)" (off by default): the first Free Duel win against Duel Master K and the first one against Heishin (Heishin 1, lost in the campaign) split like campaign wins instead of being farm duels |
 | A-TEC target | Selected automatically against Pegasus |

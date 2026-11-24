@@ -31,7 +31,7 @@ BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
 SOURCES = {"epsxe": "ePSXe", "duckstation": "DuckStation", "ps2": "PS2"}   # source du jeu -> nom affiche
-VERSION = "1.27"                  # affichee dans le titre de la fenetre
+VERSION = "1.28"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,

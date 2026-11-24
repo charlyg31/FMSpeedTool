@@ -597,6 +597,18 @@ class DeckReader:
         self.watcher.reset()
         self.version += 1
 
+    def snapshot(self):
+        """Copie du deck connu (sauvegarde du jeu)."""
+        import copy
+        return copy.deepcopy(self.watcher)
+
+    def restore(self, snap):
+        """Remet le deck d'une sauvegarde (chargement de cette sauvegarde dans le jeu)."""
+        import copy
+        self.watcher = copy.deepcopy(snap)
+        self.watcher.other_frame()        # pas de comparaison avec une image d'avant le chargement
+        self.version += 1
+
 
 class CardDB:
     def __init__(self, path):

@@ -159,6 +159,7 @@
   "{msg} : ignore (deja fait avant le chargement, encore {n})": "{msg}: ignored (already done before the load, {n} left)",
   "Sauvegarde : {n} split(s) faits a ce point": "Save: {n} split(s) done at this point",
   "Chargement : aucune sauvegarde vue pendant cette run, rien a corriger": "Load: no save seen during this run, nothing to fix",
+  "Deck : retour au deck de la sauvegarde ({n}/40)": "Deck: back to the save's deck ({n}/40)",
   "Etoiles : {total} (retour a la sauvegarde)": "Star chips: {total} (back to the save)",
   "Chargement : aucun split depuis la sauvegarde": "Load: no split since the save",
   "Chargement : les {n} prochain(s) split(s) seront ignores": "Load: the next {n} split(s) will be ignored",
