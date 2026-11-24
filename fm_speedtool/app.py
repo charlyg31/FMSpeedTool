@@ -22,6 +22,7 @@ import tracker
 import vision
 from i18n import _
 from livesplit import LiveSplitClient
+from livesplit_one import LiveSplitOneServer
 
 APP_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FMSpeedTool")
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -29,7 +30,7 @@ BUILTIN_DIR = os.path.join(BASE_DIR, "assets", "builtin")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 FPS_TARGET = 60
 SOURCES = {"epsxe": "ePSXe", "duckstation": "DuckStation", "ps2": "PS2"}   # source du jeu -> nom affiche
-VERSION = "1.28"                  # affichee dans le titre de la fenetre
+VERSION = "1.29"                  # affichee dans le titre de la fenetre
 
 DEFAULT_CONFIG = {
     "host": "localhost", "port": 16834,
@@ -39,7 +40,8 @@ DEFAULT_CONFIG = {
     "ps2_framing": None,          # [dy, sy, dx, sx, complet] cadrage PS2 trouve (None : a chercher)
     "epsxe_framing": None,        # idem pour la fenetre ePSXe
     "use_audio": True,            # le son du jeu tranche entre fusion et equipement
-    "livesplit_mode": "script",   # "script" (FMSpeedTool.asl) ou "tcp" (serveur TCP)
+    "livesplit_mode": "script",   # "script" (FMSpeedTool.asl), "tcp" (serveur TCP) ou "one" (LiveSplit One)
+    "one_port": 16835,            # port du serveur WebSocket auquel LiveSplit One se connecte
     "options": {"split_first_loss": True, "auto_reset": True, "auto_start": True, "split_farm_v2": False,
                 "load_mode": "undo", "all_duelists": False},
     "f6": {f: 0 for f in fmlogic.F6_FIELDS}, "dark_hole": False, "equips": [],
@@ -78,6 +80,7 @@ class Worker(threading.Thread):
         self.fps = 0.0
         self.running = True
         self.ls_saved_index = None        # TCP : split en cours a la derniere sauvegarde
+        self.hwnd = None                  # fenetre du jeu analysee
 
     def on_event(self, kind, msg):
         self.events.put((kind, msg))
@@ -104,7 +107,7 @@ class Worker(threading.Thread):
                 bridge.reset()
                 bridge.start()
             return
-        ls = self.app.livesplit
+        ls = self.app.livesplit_one if self.app.cfg["livesplit_mode"] == "one" else self.app.livesplit
         try:
             if kind == "split":
                 ls.split()
@@ -122,7 +125,10 @@ class Worker(threading.Thread):
                 if opts["auto_start"]:
                     ls.start()
         except OSError:
-            self.events.put(("error", _("LiveSplit injoignable (serveur TCP demarre ?)")))
+            if self.app.cfg["livesplit_mode"] == "one":
+                self.events.put(("error", _("LiveSplit One non connecte (Parametres > Connexion au serveur)")))
+            else:
+                self.events.put(("error", _("LiveSplit injoignable (serveur TCP demarre ?)")))
 
     def run(self):
         frames, t0 = 0, time.monotonic()
@@ -133,6 +139,11 @@ class Worker(threading.Thread):
             except OSError:
                 frame = None
             self.window_ok = frame is not None
+            if frame is not None and self.cap.hwnd != self.hwnd:
+                # Autre fenetre (emulateur relance...) : bandes noires recherchees de nouveau.
+                self.hwnd = self.cap.hwnd
+                with self.lock:
+                    self.app.tracker.area = vision.GameArea()
             if self.app.tracker.audio is not None and frame is not None:
                 self.app.tracker.audio.follow(self.cap.hwnd)   # son du programme du jeu
             if frame is not None:
@@ -165,6 +176,7 @@ class App:
         except OSError:
             self.bridge = None            # memoire partagee indisponible : TCP seulement
         self.livesplit = LiveSplitClient(self.cfg["host"], int(self.cfg["port"]))
+        self.livesplit_one = LiveSplitOneServer(int(self.cfg.get("one_port") or 16835))
         # Chiffres du HUD : un jeu par source (la sortie video d'une PS2 les rend un peu
         # differemment d'ePSXe ; ceux appris a la main vont dans le fichier de la source).
         ps2 = self.cfg.get("source") == "ps2"
@@ -229,6 +241,8 @@ class App:
         self.worker.start()
         if self.cfg["livesplit_mode"] == "tcp":
             self._connect_livesplit(quiet=True)
+        elif self.cfg["livesplit_mode"] == "one":
+            self._start_one_server()
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._tick()
 
@@ -443,7 +457,9 @@ class App:
         self.port = tk.StringVar(value=str(self.cfg["port"]))
         ttk.Radiobutton(ls, text="Script FMSpeedTool.asl", value="script",
                         variable=self.ls_mode).pack(side="left", padx=4)
-        ttk.Radiobutton(ls, text="TCP", value="tcp", variable=self.ls_mode).pack(side="left", padx=(4, 12))
+        ttk.Radiobutton(ls, text="TCP", value="tcp", variable=self.ls_mode).pack(side="left", padx=4)
+        ttk.Radiobutton(ls, text="LiveSplit One", value="one",
+                        variable=self.ls_mode).pack(side="left", padx=(4, 12))
         ttk.Label(ls, text="TCP (Control > Start TCP Server) :").pack(side="left", padx=4)
         ttk.Entry(ls, textvariable=self.host, width=10).pack(side="left", padx=2)
         ttk.Entry(ls, textvariable=self.port, width=6).pack(side="left")
@@ -537,10 +553,27 @@ class App:
     def _set_ls_mode(self):
         self.cfg["livesplit_mode"] = self.ls_mode.get()
         self._save_config()
-        if self.cfg["livesplit_mode"] == "tcp":
+        mode = self.cfg["livesplit_mode"]
+        if mode == "one":
+            self._start_one_server()
+        else:
+            self.livesplit_one.close()
+        if mode == "tcp":
             self._connect_livesplit(quiet=True)
-        self._log(_("LiveSplit : script FMSpeedTool.asl") if self.ls_mode.get() == "script"
-                  else _("LiveSplit : serveur TCP"))
+        if mode == "script":
+            self._log(_("LiveSplit : script FMSpeedTool.asl"))
+        elif mode == "tcp":
+            self._log(_("LiveSplit : serveur TCP"))
+
+    def _start_one_server(self):
+        # LiveSplit One (web ou bureau) se connecte a ce serveur : Parametres > Connexion au serveur.
+        if self.livesplit_one.listening:
+            return
+        try:
+            self.livesplit_one.start_server()
+            self._log(_("LiveSplit One : Parametres > Connexion au serveur > {url}", url=self.livesplit_one.url))
+        except OSError:
+            self._log(_("LiveSplit One : port {port} deja utilise", port=self.livesplit_one.port))
 
     def _set_option(self, key, value):
         self.tracker.options[key] = value
@@ -565,8 +598,9 @@ class App:
                                                      "clic droit > Control > Start TCP Server."))
 
     def _ls_cmd(self, cmd):
+        ls = self.livesplit_one if self.cfg["livesplit_mode"] == "one" else self.livesplit
         try:
-            getattr(self.livesplit, cmd)()
+            getattr(ls, cmd)()
             self._log(f"LiveSplit : {cmd}")
         except OSError:
             self._log(_("LiveSplit injoignable"))
@@ -989,6 +1023,13 @@ class App:
             win = "OK" if self.worker.window_ok else _("introuvable")
         if self.cfg["livesplit_mode"] == "script":
             ls = _("script .asl") if self.bridge is not None else _("script indisponible (utilise TCP)")
+        elif self.cfg["livesplit_mode"] == "one":
+            if self.livesplit_one.connected:
+                ls = _("LiveSplit One connecte")
+            elif self.livesplit_one.listening:
+                ls = _("LiveSplit One en attente ({url})", url=self.livesplit_one.url)
+            else:
+                ls = _("LiveSplit One : port {port} deja utilise", port=self.livesplit_one.port)
         else:
             ls = _("TCP connecte") if self.livesplit.connected else _("TCP deconnecte")
         def val(x):
@@ -1029,6 +1070,7 @@ class App:
         if isinstance(self.f6, f6calc.F6Process):
             self.f6.close()
         self.livesplit.close()
+        self.livesplit_one.close()
         self.root.destroy()
 
 

@@ -33,11 +33,19 @@ class GameArea:
     le jeu : il faut les retirer, sinon tout est decale. Une zone candidate
     (4:3 ou 5:4, centree) n'est retenue que si son exterieur est TOUJOURS reste
     noir et que du contenu a deja touche ses deux bords opposes ; sinon on
-    garde la fenetre entiere (les bords du jeu sont souvent noirs en duel)."""
+    garde la fenetre entiere (les bords du jeu sont souvent noirs en duel).
+    Preuve des bandes : des images ou le jeu touche les deux bords de la zone alors que
+    l'exterieur reste tout noir. Apres 120 de ces images, un petit element clair dans les
+    bandes (messages de DuckStation, curseur) ne compte plus ; seul un contenu qui couvre
+    une bonne partie des bandes montre qu'il n'y en a pas. Une zone abandonnee (demarrage
+    de l'emulateur, autre format d'image) revient apres 120 de ces images de suite."""
 
     ASPECTS = (4 / 3, 5 / 4)
     BLACK = 16
     STEP = 4                      # sous-echantillonnage pour la vitesse
+    OVERLAY_MAX = 0.08            # part des bandes allumee : au-dela, ce ne sont pas des bandes
+    OVERLAY_SPAN = 0.3            # ... ou allumee sur plus de 30 % de leur longueur
+    PROOF_FRAMES = 120            # images-preuves avant de tolerer un message / de revenir
 
     def __init__(self):
         self.size = None
@@ -55,7 +63,19 @@ class GameArea:
                 box = (0, (h - gh) // 2, w, gh)
             else:
                 continue
-            self.cands.append({"box": box, "alive": True, "edge_a": False, "edge_b": False})
+            self.cands.append({"box": box, "alive": True, "edge_a": False, "edge_b": False,
+                               "proof": 0, "streak": 0})
+
+    def _content_outside(self, c, out, inside, side_bars):
+        """Du contenu du jeu hors de la zone (pas un petit message ou un curseur) ?
+        Tant que les bandes ne sont pas prouvees, tout compte."""
+        if c["proof"] < self.PROOF_FRAMES:
+            return True
+        if out[~inside].mean() > self.OVERLAY_MAX:
+            return True
+        # Un message tient sur quelques lignes ; le jeu s'etale le long de la bande.
+        span = out.any(axis=1) if side_bars else out.any(axis=0)
+        return span.mean() > self.OVERLAY_SPAN
 
     def crop(self, frame):
         h, w = frame.shape[:2]
@@ -64,20 +84,34 @@ class GameArea:
         s = self.STEP
         lit = frame[::s, ::s].max(axis=2) > self.BLACK
         for c in self.cands:
-            if not c["alive"]:
-                continue
-            x, y, gw, gh = (v // s for v in c["box"])
+            bx, by, bw, bh = c["box"]
+            # Zone en image reduite : debut arrondi en dessous, fin au-dessus (la derniere
+            # ligne ou colonne du jeu reste dedans).
+            x, y = bx // s, by // s
+            gw, gh = -(-(bx + bw) // s) - x, -(-(by + bh) // s) - y
             inside = np.zeros_like(lit)
             inside[y:y + gh, x:x + gw] = True
-            if (lit & ~inside).any():
-                c["alive"] = False               # du contenu hors de la zone : pas de bandes
-                continue
+            out = lit & ~inside
             if x > 0:                            # bandes laterales : bords gauche/droit
-                c["edge_a"] |= bool(lit[y:y + gh, x:x + 2].any())
-                c["edge_b"] |= bool(lit[y:y + gh, x + gw - 2:x + gw].any())
+                a = bool(lit[y:y + gh, x:x + 2].any())
+                b = bool(lit[y:y + gh, x + gw - 2:x + gw].any())
             else:                                # bandes haut/bas
-                c["edge_a"] |= bool(lit[y:y + 2, x:x + gw].any())
-                c["edge_b"] |= bool(lit[y + gh - 2:y + gh, x:x + gw].any())
+                a = bool(lit[y:y + 2, x:x + gw].any())
+                b = bool(lit[y + gh - 2:y + gh, x:x + gw].any())
+            if out.any():
+                c["streak"] = 0
+                if c["alive"] and self._content_outside(c, out, inside, x > 0):
+                    c["alive"] = False           # du contenu hors de la zone : pas de bandes
+                continue
+            if a and b:                          # le jeu touche les deux bords, dehors tout noir
+                c["proof"] += 1
+                c["streak"] += 1
+            if not c["alive"]:
+                if c["streak"] >= self.PROOF_FRAMES:     # bandes de nouveau la, de facon sure
+                    c.update(alive=True, edge_a=True, edge_b=True, proof=c["streak"])
+                continue
+            c["edge_a"] |= a
+            c["edge_b"] |= b
         proven = [c for c in self.cands if c["alive"] and c["edge_a"] and c["edge_b"]]
         if not proven:
             return frame
