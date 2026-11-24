@@ -1053,7 +1053,14 @@ def main():
     except (AttributeError, OSError):
         pass
     root = tk.Tk()
-    App(root)
+    app = App(root)
+    if sys.platform != "win32":
+        # Linux : arret par signal (kill, fermeture de session) = fermeture normale, sinon le
+        # processus du tableur reste orphelin. La boucle de l'interface tourne toutes les
+        # 200 ms : le signal est traite a ce moment-la.
+        import signal
+        signal.signal(signal.SIGTERM, lambda *_a: root.after(0, app.close))
+        signal.signal(signal.SIGHUP, lambda *_a: root.after(0, app.close))
     root.mainloop()
 
 

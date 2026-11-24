@@ -16,6 +16,9 @@ Notice pour la personne ou l'assistant qui teste sur une machine Linux. Réponds
 
 ## 1. Récupérer la branche
 
+Il faut **Python 3.11 ou plus** (numpy 2.5). Sur Ubuntu 22.04 (Python 3.10), installer un Python
+plus récent à part, par exemple avec `uv python install 3.13`, puis créer le venv avec lui.
+
 ```sh
 git clone -b linux https://github.com/charlyg31/FMSpeedTool.git
 cd FMSpeedTool

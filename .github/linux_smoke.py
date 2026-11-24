@@ -104,17 +104,22 @@ def main():
                                stdout=subprocess.DEVNULL, stderr=errf, start_new_session=True)
         time.sleep(40)
         alive = app.poll() is None
+        # SIGTERM au logiciel seul : il doit se fermer proprement, tableur compris.
+        app.send_signal(signal.SIGTERM)
         try:
-            os.killpg(app.pid, signal.SIGTERM)
-            app.wait(timeout=10)
-        except (ProcessLookupError, subprocess.TimeoutExpired):
-            try:
-                os.killpg(app.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            app.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            pass
+        time.sleep(2)
+        orphans = subprocess.run(["pgrep", "-g", str(app.pid)], capture_output=True, text=True).stdout.split()
+        try:
+            os.killpg(app.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
     err = open(log).read()
     print(err[-3000:])
     assert alive, "le logiciel s'est arrete"
+    assert not orphans, f"processus restes apres SIGTERM : {orphans}"
     assert "Traceback" not in err, "erreur Python pendant le lancement"
     f6 = os.path.join(env["XDG_CONFIG_HOME"], "FMSpeedTool", "f6_error.txt")
     assert not os.path.exists(f6), open(f6).read()
