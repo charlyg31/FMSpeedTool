@@ -64,7 +64,9 @@ def main():
     script = os.path.join(tempfile.gettempdir(), "fake_emu.py")
     open(script, "w").write(FAKE)
     path, ref = title_image()
-    proc = subprocess.Popen([fake, script, path])
+    # Le lien dur est hors du venv eventuel : on lui donne les bibliotheques de ce Python.
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(p for p in sys.path if p and os.path.isdir(p)))
+    proc = subprocess.Popen([fake, script, path], env=env)
     try:
         cap = capture.WindowCapture()
         cap.set_source(None, "duckstation")
