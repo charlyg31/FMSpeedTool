@@ -797,7 +797,8 @@ def reveal_card(img):
 
 def card_compare(ref, cur):
     """'counting' : meme carte au meme endroit dont l'ATK/DFD defile (equipement) ;
-    'same' : meme carte, chiffres fixes ; 'other' : autre carte ou plus de carte.
+    'same' : meme carte, chiffres fixes ; 'turning' : meme place, carte qui pivote encore ;
+    'other' : autre carte ou plus de carte.
     La case ATK/DFD est recalee a +-3 px (une carte bouge parfois d'un pixel, ce qui
     suffirait a faire croire que le texte change). Mesure sur trois videos : meme
     carte fixe <= 2,0 ; ATK qui defile >= 8."""
@@ -806,7 +807,12 @@ def card_compare(ref, cur):
     if ref[3].shape != (54, 116) or cur[3].shape != (54, 116):
         return "other"
     # Meme illustration : < 1,3 sur une capture nette, jusqu'a 4,1 sur un stream compresse.
-    if float(np.abs(ref[2] - cur[2]).mean()) > 4.5:
+    art = float(np.abs(ref[2] - cur[2]).mean())
+    if art > 10.0:
+        # Meme place, illustration tres differente : la carte finit de pivoter (reference
+        # prise penchee ; 17 a 18 sur les Megamorph de la video d'Aifo0s du 24/11).
+        return "turning"
+    if art > 4.5:
         return "other"
     inner = ref[3][3:-3, 3:-3]
     r = cv2.matchTemplate(cur[3], inner, cv2.TM_SQDIFF)
