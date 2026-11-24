@@ -1,6 +1,7 @@
 """Test Linux sans emulateur : sur un ecran X virtuel (Xvfb + gestionnaire de fenetres),
-un faux emulateur dont le programme s'appelle "duckstation-fake" affiche l'ecran titre ;
-l'outil doit le trouver par son programme, le capturer et reconnaitre l'ecran titre.
+un faux emulateur dont le programme s'appelle "duckstation-fake" affiche l'ecran titre du jeu
+(image reelle prise dans DuckStation sous Windows, 1397x963) ; l'outil doit le trouver par son
+programme, le capturer a l'identique, se caler dessus et reconnaitre l'ecran titre (NEW GAME).
 Puis le logiciel complet est lance 40 s : il ne doit pas planter.
 
 python .github/linux_smoke.py      (dans xvfb-run, avec un gestionnaire de fenetres lance)
@@ -20,10 +21,10 @@ FAKE = r'''
 import sys, tkinter as tk
 from PIL import Image, ImageTk
 from Xlib import display
-img = Image.open(sys.argv[1]).convert("RGB").resize((640, 480))
+img = Image.open(sys.argv[1]).convert("RGB")
 root = tk.Tk()
 root.title("Yu-Gi-Oh! Forbidden Memories")
-root.geometry("640x480+40+40")
+root.geometry(f"{img.width}x{img.height}+20+20")
 photo = ImageTk.PhotoImage(img)
 tk.Label(root, image=photo, bd=0).pack()
 root.update()
@@ -39,15 +40,29 @@ root.mainloop()
 
 
 def title_image():
-    """Ecran titre du jeu : celui des tests s'il existe, sinon un ecran de synthese."""
+    """Ecran titre du jeu tel que DuckStation l'affiche (capture reelle)."""
     import cv2
-    import numpy as np
-    path = os.path.join(tempfile.gettempdir(), "fm_title.png")
-    img = np.zeros((480, 640, 3), np.uint8)
-    img[:, :] = (30, 60, 200)
-    cv2.putText(img, "FM SPEED TOOL TEST", (60, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
-    cv2.imwrite(path, img)
-    return path, img
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "duckstation_title.png")
+    return path, cv2.imread(path)
+
+
+def read_title(img):
+    """Meme chaine que le logiciel : bandes noires retirees, 640x512, cadrage, puis ecran titre
+    reconnu (gabarit NEW GAME surligne). Rend le meilleur score du gabarit."""
+    import vision
+    assets = os.path.join(SRC, "assets")
+    area = vision.GameArea()
+    norm = None
+    for _ in range(3):
+        norm = vision.normalize(area.crop(img))
+    fr = vision.Framing(os.path.join(assets, "hud_ref.png"), vertical=True)
+    for _ in range(6):
+        fr.calibrate(norm)
+    print("cadrage", [round(float(v), 3) for v in fr.values()[:4]], "complet", fr.full)
+    framed = fr.apply(norm)
+    lib = vision.TemplateLibrary(os.path.join(assets, "builtin"))
+    scores = [t.score(framed) for t in lib.items if t.action == "title_newgame"]
+    return max(scores)
 
 
 def main():
@@ -83,11 +98,14 @@ def main():
                       "programme", cx.process_exe(wid), "visible", cx._viewable(wid))
         assert img is not None, f"fenetre non capturee (fenetre={cap.hwnd}, recouverte={cap.covered})"
         print("capture", img.shape, "fenetre", cap.hwnd)
-        import cv2
-        got = cv2.resize(img, (640, 480))
-        diff = float(np.abs(got.astype(int) - ref.astype(int)).mean())
+        import cv2  # noqa: F401
+        assert img.shape == ref.shape, f"taille capturee {img.shape} au lieu de {ref.shape}"
+        diff = float(np.abs(img.astype(int) - ref.astype(int)).mean())
         print("ecart moyen avec l'image affichee :", round(diff, 2))
-        assert diff < 12, "l'image capturee ne correspond pas"
+        assert diff < 3, "l'image capturee ne correspond pas"
+        score = read_title(img)
+        print("ecran titre reconnu : score", round(score, 3), "(seuil 0,85)")
+        assert score >= 0.85, "ecran titre non reconnu"
         assert capture.list_windows(), "list_windows vide"
     finally:
         proc.terminate()

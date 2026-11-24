@@ -21,7 +21,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Test capture + lancement
         run: |
-          xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'openbox & sleep 2; python .github/linux_smoke.py'
+          xvfb-run -a -s "-screen 0 1920x1080x24" sh -c 'openbox & sleep 2; python .github/linux_smoke.py'
       - name: Construction
         run: sh build_linux.sh
       - name: Exe construit demarre

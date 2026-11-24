@@ -33,7 +33,7 @@ sans droits root), dis-le et teste ce qui reste possible (étape 2 sans écran :
 ## 2. Test automatique (sans émulateur)
 
 ```sh
-xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'openbox & sleep 2; python .github/linux_smoke.py'
+xvfb-run -a -s "-screen 0 1920x1080x24" sh -c 'openbox & sleep 2; python .github/linux_smoke.py'
 ```
 
 Il lance un faux émulateur nommé `duckstation-fake`, vérifie que l'outil le trouve, capture la bonne
