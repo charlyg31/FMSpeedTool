@@ -31,6 +31,12 @@ to the game, nothing modified in the game or the emulator.** Everything is shown
   during the run. Remove any other autosplitter from the layout so you don't split twice.
 - **LiveSplit over TCP (fallback)**: right click > Control > Start TCP Server, pick "TCP" in the
   Options panel, then "Connect LiveSplit".
+- **LiveSplit One** (web at one.livesplit.org or desktop; works on Linux and Mac too): pick
+  "LiveSplit One" in the Options panel, then in LiveSplit One: Settings > Server Connection >
+  Connect, address `ws://localhost:16835` (shown in the status line). Start, splits, reset and
+  undo after a save load are sent by the tool. In Chrome, allow "access to devices on your local
+  network" when the browser asks. Close the LiveSplit One settings during the run: it refuses
+  commands while they are open.
 
 ## Playing on PS2 (capture card)
 

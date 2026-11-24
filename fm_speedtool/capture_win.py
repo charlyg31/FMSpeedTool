@@ -112,6 +112,15 @@ def _render_child(top):
     return best[1] if best[0] >= 0.3 * _client_area(top) else top
 
 
+def _is_menu(hwnd):
+    """Menu deroulant ou petite fenetre d'outil de l'emulateur (pas l'image du jeu) :
+    menu Windows (#32768), menu Qt de DuckStation (classe ...Popup...), fenetre d'outil."""
+    cls = ctypes.create_unicode_buffer(256)
+    user32.GetClassNameW(hwnd, cls, 256)
+    ex = user32.GetWindowLongW(hwnd, -20)            # GWL_EXSTYLE
+    return cls.value == "#32768" or "Popup" in cls.value or bool(ex & 0x80)   # WS_EX_TOOLWINDOW
+
+
 def find_emulator_windows(source):
     """Fenetres visibles de l'emulateur (reconnu a son programme, pas a son titre : un
     explorateur ouvert sur un dossier "EpsxE" a un titre qui commence pareil), les plus
@@ -120,7 +129,8 @@ def find_emulator_windows(source):
     found = []
 
     def cb(hwnd, _):
-        if user32.IsWindowVisible(hwnd) and process_exe(hwnd).startswith(prefix):
+        if (user32.IsWindowVisible(hwnd) and process_exe(hwnd).startswith(prefix)
+                and not _is_menu(hwnd)):
             a = _client_area(hwnd)
             if a >= 160 * 120:
                 target = _render_child(hwnd) if source == "duckstation" else hwnd
